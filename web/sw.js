@@ -1,6 +1,6 @@
 // Service worker: ULTOR sin conexión (PWA instalable).
 // Cache-first con caché versionada (subir la versión SIEMPRE que cambie web/).
-const CACHE = 'ultor-v2';
+const CACHE = 'ultor-v3';
 
 const CORE = [
   './', './index.html', './manifest.webmanifest',

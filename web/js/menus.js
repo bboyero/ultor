@@ -96,6 +96,8 @@ export async function fadeOUT(ms = 900) {
     origen[i * 3 + 1] = E.lut[i * 4 + 1] >> 2;
     origen[i * 3 + 2] = E.lut[i * 4 + 2] >> 2;
   }
+  window.__fadeLog = window.__fadeLog || [];
+  window.__fadeLog.push('OUT ' + ms);
   const t1 = performance.now();
   for (;;) {
     const k = Math.max(0, 1 - (performance.now() - t1) / ms);
@@ -106,32 +108,55 @@ export async function fadeOUT(ms = 900) {
       E.lut[i * 4 + 2] = (b << 2) | (b >> 4);
     }
     present();
-    if (k <= 0) return;
+    if (k <= 0) { window.__fadeLog.push('OUT fin lut1=' + E.lut[4]); return; }
     await dormir(16);
   }
 }
 
 // fadeIN: sube cada canal hacia E.paleta (el destino), 63 pasos
 export async function fadeIN(ms = 900) {
-  const actual = new Uint8Array(256 * 3);
-  for (let i = 0; i < 256; i++) {
-    actual[i * 3] = E.lut[i * 4] >> 2;
-    actual[i * 3 + 1] = E.lut[i * 4 + 1] >> 2;
-    actual[i * 3 + 2] = E.lut[i * 4 + 2] >> 2;
-  }
+  // fundido determinista: cada paso pinta el objetivo escalado por k.
+  // (La versión acumulativa anterior podía quedarse a medio brillo.)
+  const destino = new Uint8Array(768);
+  destino.set(E.paleta);
   const t0 = performance.now();
-  while (true) {
+  for (;;) {
     const k = Math.min(1, (performance.now() - t0) / ms);
     for (let i = 0; i < 256; i++) {
-      for (let c = 0; c < 3; c++) {
-        let v = actual[i * 3 + c];
-        const t = E.paleta[i * 3 + c];
-        v += v < t ? Math.min(1, Math.round((t - v) * k)) : (v > t ? -Math.min(1, Math.round((v - t) * k)) : 0);
-        E.lut[i * 4 + c] = (v << 2) | (v >> 4);
-      }
+      const r = Math.round(destino[i * 3] * k);
+      const g = Math.round(destino[i * 3 + 1] * k);
+      const b = Math.round(destino[i * 3 + 2] * k);
+      E.lut[i * 4] = (r << 2) | (r >> 4);
+      E.lut[i * 4 + 1] = (g << 2) | (g >> 4);
+      E.lut[i * 4 + 2] = (b << 2) | (b >> 4);
     }
     present();
     if (k >= 1) return;
+    await dormir(16);
+  }
+}
+
+// fadeOUT: escala la paleta mostrada hasta negro (determinista)
+export async function fadeOUT(ms = 900) {
+  const origen = new Uint8Array(768);
+  for (let i = 0; i < 256; i++) {
+    origen[i * 3] = E.lut[i * 4] >> 2;
+    origen[i * 3 + 1] = E.lut[i * 4 + 1] >> 2;
+    origen[i * 3 + 2] = E.lut[i * 4 + 2] >> 2;
+  }
+  const t0 = performance.now();
+  for (;;) {
+    const k = Math.max(0, 1 - (performance.now() - t0) / ms);
+    for (let i = 0; i < 256; i++) {
+      const r = Math.round(origen[i * 3] * k);
+      const g = Math.round(origen[i * 3 + 1] * k);
+      const b = Math.round(origen[i * 3 + 2] * k);
+      E.lut[i * 4] = (r << 2) | (r >> 4);
+      E.lut[i * 4 + 1] = (g << 2) | (g >> 4);
+      E.lut[i * 4 + 2] = (b << 2) | (b >> 4);
+    }
+    present();
+    if (k <= 0) return;
     await dormir(16);
   }
 }
