@@ -40,7 +40,7 @@ const E = {
   secuencia: 8, reposo: true, sentido: true,
   saltando: false, cayendo: false, subiendo: false,
   corriendo: false, guardia: false, puntillas: false, agachado: false,
-  ctrlduna: 0, Movfondo: false, BAJAalturas: 0,
+  ctrduna: 0, Movfondo: false, BAJAalturas: 0,
   veces: 0, salir: false, keys: new Uint8Array(128),
   Xcorrecion: 0,
   YO: null,          // recuadro del héroe para las intersecciones de combate
@@ -1102,7 +1102,7 @@ async function boot() {
   }
 
   initTeclado();
-  window.__E = E; // diagnóstico por CDP
+  window.__E = E; window.__P = Pvirtual; // diagnóstico por CDP
   cargarSonido().catch(() => {}); // sin SONIDO.DAT el juego sigue mudo
   cargarGameOver(); // sin GAME.DAC el héroe muere sin pantalla de game over
   // WebAudio se desbloquea con el primer gesto (política de los navegadores)
