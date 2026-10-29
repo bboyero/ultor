@@ -2,9 +2,17 @@
 .chrome-tmp*/
 .chrome-cdp/
 .chrome-e2e/
-.chrome-e2e2/
-.chrome-e2e3/
-.chrome-e2e4/
-.chrome-e2e5/
 # Capturas de diagnóstico
 *.png
+
+.chrome-e2e*/
+# Diagnósticos temporales
+estado*.json
+captura-*.png
+andar*.png
+salto*.png
+menu-*.png
+present-*.png
+hud.png
+e2e-frame.png
+primer-frame.png
