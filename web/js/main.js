@@ -49,6 +49,11 @@ const E = {
   recibiendo: false, // el héroe acaba de recibir (no le pegan dos veces seguidas)
   mapeado: false,    // minimapa (TAB)
   vecesparado: 0,    // frames de inactividad (bostezo a 128, picar a 250)
+  puntos: 0,         // marcadores (puntos por golpes y enemigos)
+  cronometro: 0,     // cuenta frames (maxtime=1000, ~4,4 min a 60fps)
+  ultimaAC: -1,      // (cronometro div 16) del último repintado del crono
+  MALOSmuertos: 0,
+  numero: null,      // NUMERO.DAT: 10 dígitos de 8x8 (64 B cada uno)
   gameover: null,    // GAME.DAC decodificado (249x74) para la muerte
   acelerado: false, // tests de Node: los bucles de animación no duermen
 };
@@ -481,9 +486,38 @@ function ponDuna() {
 }
 
 function ponPanel() {
-  Pvirtual.set(E.panel, 175 * W);
-  Hline(0, 180, 255, 25 * 4);
-  Hline(0, 180, 98, E.vida * 4);
+  // PANEL.DAC en (0,176) con semántica putico (0 transparente, color-5)
+  for (let a = 0; a < 24; a++)
+    for (let b = 0; b < W; b++) {
+      const v = E.panel[a * W + b];
+      if (v !== 0) Pvirtual[(176 + a) * W + b] = Math.max(1, v - 5);
+    }
+  // vida: 4 filas en y=190, color por vida div 5 (BACKUP actualizaVIDA)
+  const colores = [32, 59, 69, 84, 96, 96];
+  const cv = colores[Math.min(5, (E.vida / 5) | 0)];
+  for (let i = 0; i < 4; i++) { Hline(1, 190 + i, 255, 100); Hline(1, 190 + i, cv, E.vida * 4); }
+  // crono: 4 filas en y=190, x=104, maxtime=1000 (BACKUP actualizaCRONO)
+  for (let i = 0; i < 4; i++) {
+    Hline(104, 190 + i, 255, 62);
+    Hline(104, 190 + i, 145, ((1000 - E.cronometro) / 16) | 0);
+  }
+  // vida del enemigo actual: 4 filas en y=195 (BACKUP actualizaVIDA_E)
+  const ve = E.num < E.MALO.length ? Math.max(0, E.MALO[E.num].vidaE) : 0;
+  for (let i = 0; i < 4; i++) { Hline(1, 195 + i, 255, 100); Hline(1, 195 + i, 145, ve * 4); }
+  // marcadores: puntos en (225,188) con NUMERO.DAT (dígitos 8x8, -5 como los sprites)
+  if (E.numero) {
+    let s = String(E.puntos);
+    while (s.length < 8) s = '0' + s;
+    for (let i = 0; i < 8; i++) {
+      const ch = s.charCodeAt(i) - 48;
+      if (ch < 0 || ch > 9) continue;
+      for (let a = 0; a < 8; a++)
+        for (let b = 0; b < 8; b++) {
+          const v = E.numero[ch * 64 + a * 8 + b];
+          if (v !== 0) Pvirtual[(188 + a) * W + 225 + 8 * i + b] = v - 5;
+        }
+    }
+  }
 }
 
 function present() {
@@ -768,6 +802,7 @@ function dadoSI_NO() {
     if (m.vidaE > 0 && hayInterseccion(E.YO, EL)) {
       play('puno');
       m.vidaE--; actualizaVIDA_E();
+      E.puntos += 8;
       if (E.sentido) m.Ex += 15; else m.Ex -= 15;
     }
   }
@@ -950,7 +985,10 @@ function E_muerte() {
     case 2: poneE(m.Ex, m.Ey + 10, 1, 'MUEb'); break;
     case 3: poneE(m.Ex, m.Ey + 25, 0, 'MUEc'); break;
     case 4: poneE(m.Ex, m.Ey + 25, 1, 'MUEc'); break;
-    default: m.muertoE = true;
+    default:
+      m.muertoE = true;
+      E.puntos += (5 - (m.clase || 0)) * 32;
+      E.MALOSmuertos++;
   }
 }
 
@@ -1007,7 +1045,10 @@ async function tick() {
     ponPanel();
     present();
     E.veces++;
-    // input (despacho del repeat del original)
+    E.cronometro++;
+  if (((E.cronometro / 16) | 0) !== E.ultimaAC) E.ultimaAC = (E.cronometro / 16) | 0;
+  if (E.cronometro >= 1000) E.salir = true; // tiempo agotado (craneo.dac vendrá con las pantallas)
+  // input (despacho del repeat del original)
     if (E.keys[SC.ARR] && (E.keys[SC.DER] || E.keys[SC.IZQ])) await salto();
     else if (E.keys[SC.SPACE]) { E.corriendo = true; E.secuencia = 0; }
     else if (E.keys[SC.DER] && !E.keys[SC.IZQ]) await derecha();
@@ -1076,10 +1117,10 @@ async function cargarGameOver() {
 }
 
 async function boot() {
-  const [pal, mapaB, fondo, hombre, duna, panel, enemigos] = await Promise.all([
+  const [pal, mapaB, fondo, hombre, duna, panel, numero] = await Promise.all([
     fetchBuf('PALETA.L01'), fetchBuf('MAPA.DAT'), fetchBuf('FONDO.DAT'),
-    fetchBuf('HOMBRE.DAT'), fetchBuf('DUNA2.DAT'), fetchBuf('PANEL.DAT'),
-    fetchBuf('ENEMIGO.DAT'),
+    fetchBuf('HOMBRE.DAT'), fetchBuf('DUNA2.DAT'), fetchBuf('PANEL.DAC'),
+    fetchBuf('NUMERO.DAT'),
   ]);
   for (let i = 0; i < 256; i++) {
     const r = pal[i * 3], g = pal[i * 3 + 1], b = pal[i * 3 + 2];
@@ -1093,19 +1134,56 @@ async function boot() {
   const celdas = E.largo * E.alto;
   E.mapa = new Uint16Array(mapaB.buffer, mapaB.byteOffset + 4, celdas);
   E.caract = mapaB.subarray(4 + celdas * 2, 4 + celdas * 3);
-  E.fondo = fondo; E.duna = duna; E.panel = panel;
+  E.fondo = fondo; E.duna = duna;
+  E.numero = numero;
+  // PANEL.DAC: RLE (c&192==192 → run c&63 + valor), 320x24 sin paleta
+  {
+    const bytes = panel[4] | (panel[5] << 8);
+    const alto = panel[2] | (panel[3] << 8);
+    const pix = new Uint8Array(bytes * alto);
+    let ctrl = 7, off = 0;
+    for (let i = 0; i < alto; i++) {
+      let n = 0;
+      while (n < bytes) {
+        const c = panel[ctrl++];
+        if ((c & 192) === 192) {
+          const run = c & 63, v = panel[ctrl++];
+          pix.fill(v, off, off + run); off += run; n += run;
+        } else { pix[off++] = c; n++; }
+      }
+    }
+    E.panel = pix;
+  }
   let off = 0;
   for (const [nombre, X, Y, F] of SPRITES) { DIM[nombre] = { X, Y, F, off }; off += X * Y * F; }
   E.hombre = hombre;
-  // enemigos: 10 × (Ex, Ey) u16 (el resto del .DAT es de la versión antigua)
-  for (let i = 0; i < 10; i++) {
-    const Ex = enemigos[i * 4] | (enemigos[i * 4 + 1] << 8);
-    const Ey = enemigos[i * 4 + 2] | (enemigos[i * 4 + 3] << 8);
-    E.MALO.push({
-      Ex, Ey, Oex: Ex, vidaE: 5, secuenciaE: 0, E_ctrlcaida: 0,
-      sentidoE: false, Aguardia: false, noguardia: false, ataca: false,
-      ereposo: false, esaltando: false, ecae: false, muertoE: false,
-    });
+  // enemigos desde ENEMIGO.LOC (8 registros de 30 B): Ex,Ey,Oex u16 + 12
+  // flags + vidaE (byte 18) + 10 + CLASE (byte 29). maxENE=74 pero el
+  // fichero solo tiene 8: los 66 restantes quedan muertos.
+  {
+    const loc = await fetchBuf('ENEMIGO.LOC');
+    for (let i = 0; i < 74; i++) {
+      const r = i * 30;
+      const vivo = r + 30 <= loc.length;
+      E.MALO.push(vivo ? {
+        Ex: loc[r] | (loc[r + 1] << 8),
+        Ey: loc[r + 2] | (loc[r + 3] << 8),
+        Oex: loc[r + 4] | (loc[r + 5] << 8),
+        vidaE: loc[r + 18],
+        clase: loc[r + 29],
+        secuenciaE: 0, E_ctrlcaida: 0,
+        sentidoE: false, Aguardia: false, noguardia: false, ataca: false,
+        ereposo: false, esaltando: false, ecae: false, muertoE: false,
+        Erecibiendo: false, Egolpeando: false, tipo_recibe: 0,
+        tipo_ataca: 0, alguien_al_lado: 0,
+      } : {
+        Ex: 0, Ey: 0, Oex: 0, vidaE: 0, clase: 0, muertoE: true,
+        secuenciaE: 0, E_ctrlcaida: 0, sentidoE: false, Aguardia: false,
+        noguardia: false, ataca: false, ereposo: true, esaltando: false,
+        ecae: false, Erecibiendo: false, Egolpeando: false, tipo_recibe: 0,
+        tipo_ataca: 0, alguien_al_lado: 0,
+      });
+    }
   }
   E.YO = { x1: E.Hx, y1: E.Hy, x2: E.Hx + DIM.ANDA.X, y2: E.Hy + DIM.ANDA.Y };
 
