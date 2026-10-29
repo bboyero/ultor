@@ -7,7 +7,7 @@ const maxParallax = 101;
 
 import { cargarSonido, play, desbloquear } from './sonido.js';
 import { initTouch } from './entrada-tactil.js';
-import { musica, pararMusica, empezarMusica } from './musica.js';
+import { pararMusica, empezarMusica } from './musica.js';
 import { cargarDACs, creditos, presentacion, windows, config, opciones,
   pausa, abandonar, final, muertePantalla, fadeOUT, fadeIN, ponPaleta,
   mostrarDAC } from './menus.js';
