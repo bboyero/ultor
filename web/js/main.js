@@ -155,7 +155,9 @@ function ponefondo(avances) {
     let aux = nro * 256 + px + py * 16;
     let dst = 318; // fila 0, columna 318
     ponbaldosa(aux, dst, 15 - py + 1);
-    dst += W * (15 - py + 1); // doble avance del original (replicado)
+    dst += W * (15 - py + 1); // el Pascal suma esto porque su ASM no movía
+                              // la variable; MI ponbaldosa ya avanza dst
+    dst -= W * (15 - py + 1); // → compensar (neto: sin doble avance)
     for (let altura = 0; altura <= 10; altura++) {
       nro = nroBaldosa(E.mapaX + 20, E.mapaY + 1 + altura);
       aux = nro * 256 + px;
@@ -182,6 +184,7 @@ function ponefondoATRAS(avances) {
     let aux = nro * 256 + px + py * 16;
     let dst = 0;
     ponbaldosa(aux, dst, 15 - py + 1);
+    dst -= W * (15 - py + 1); // compensar (neto: sin doble avance)
     dst += W * (15 - py + 1);
     for (let altura = 0; altura <= 10; altura++) {
       nro = nroBaldosa(E.mapaX, E.mapaY + 1 + altura);
@@ -1389,6 +1392,7 @@ async function boot() {
   try { initTouch(); } catch (err) { console.error('táctil:', err); }
   if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.addEventListener('controllerchange', () => location.reload());
   }
   window.__E = E; window.__P = Pvirtual; // diagnóstico por CDP
   cargarSonido().catch(() => {}); // sin SONIDO.DAT el juego sigue mudo
@@ -1488,4 +1492,4 @@ async function iniciarPartida(soloIniciar) {
 
 boot().catch((err) => { console.error(err); document.body.textContent = 'ERROR: ' + err; });
 
-export { E, Pvirtual, Pfondo, tick, salto, frame, cae, ponefondoABAJO, ponefondoARRIBA, actualizaVIDA, dormir, present };
+export { E, Pvirtual, Pfondo, tick, salto, frame, cae, ponefondoABAJO, ponefondoARRIBA, ponefondo, ponefondoATRAS, actualizaVIDA, dormir, present };
