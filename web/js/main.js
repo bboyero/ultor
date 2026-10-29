@@ -408,10 +408,8 @@ function ponefondoARRIBA(avances) {
     // primera baldosa: filas 174-175 cols 0..15 (filas py y py+1 de la baldosa)
     let nro = nroBaldosa(E.mapaX, E.mapaY + 11);
     let aux = nro * 256 + px + py * 16;
-    let dst = 174 * W;
-    copiarFila(aux, dst, 16);
-    copiarFila(aux + 16, dst + W, 16);
-    dst += 16 - px; // fila 174, col 16-px
+    copiarFila(aux, 174 * W, 16);            // fila 174 cols 0..15
+    copiarFila(aux + 16, 175 * W, 16);       // fila 175 cols 0..15
     let resto = 16 - px;
     let col = 16 - px;
     for (let anchura = 0; anchura <= 19; anchura++) {
@@ -419,8 +417,8 @@ function ponefondoARRIBA(avances) {
       if (mover > 0) {
         nro = nroBaldosa(E.mapaX + 1 + anchura, E.mapaY + 11);
         aux = nro * 256 + py * 16;
-        copiarFila(aux, col, mover);           // fila 174
-        copiarFila(aux + 16, W + col, mover);  // fila 175
+        copiarFila(aux, 174 * W + col, mover);           // fila 174
+        copiarFila(aux + 16, 175 * W + col, mover);      // fila 175
       }
       col += 16; resto += 16;
     }

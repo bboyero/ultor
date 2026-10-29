@@ -157,4 +157,45 @@ setTimeout(() => escuchas.keydown && escuchas.keydown({ preventDefault() {} }), 
 await muerteP;
 console.log('muerte: salir=%s (game over mostrado + fundido a negro, como el original)', E.salir);
 if (!E.salir) { console.error('MUERTE NO TERMINO'); process.exit(1); }
+// 18) scroll vertical: el refill de las filas 174-175 debe ser EXACTO
+const { ponefondoARRIBA } = await import('./js/main.js');
+E.salir = false;
+let mal = 0;
+for (let rep = 0; rep < 8; rep++) {
+  ponefondoARRIBA(1);
+  // la fila r de pantalla muestra el mundo (posX+x, posY+r): verificación
+  // general píxel a píxel de las filas 174-175 tras el scroll+refill
+  for (let x = 0; x < 320; x++) {
+    const wx = E.PosEnbaldosa + x;
+    const tx = E.mapaX + (wx >> 4);
+    for (const r of [174, 175]) {
+      const wy = E.PosEnbaldosaY + r;
+      const ty = E.mapaY + (wy >> 4);
+      const nro = E.mapa[ty * E.largo + tx];
+      const esperado = E.fondo[nro * 256 + (wy & 15) * 16 + (wx & 15)];
+      if (Pfondo[r * 320 + x] !== esperado) { mal++; if (mal < 4) console.log('fila %d x=%d: %d != %d', r, x, Pfondo[r * 320 + x], esperado); }
+    }
+  }
+}
+console.log('refill vertical: %s (%d diferencias de 5120)', mal === 0 ? 'OK' : 'FALLA', mal);
+if (mal > 0) { console.error('SCROLL VERTICAL CON RAYAS'); process.exit(1); }
+// 19) lo mismo para el scroll hacia arriba (salto): filas 0-1
+const { ponefondoABAJO } = await import('./js/main.js');
+let mal2 = 0;
+for (let rep = 0; rep < 8; rep++) {
+  ponefondoABAJO(1);
+  for (let x = 0; x < 320; x++) {
+    const wx = E.PosEnbaldosa + x;
+    const tx = E.mapaX + (wx >> 4);
+    for (const r of [0, 1]) {
+      const wy = E.PosEnbaldosaY + r;
+      const ty = E.mapaY + (wy >> 4);
+      const nro = E.mapa[ty * E.largo + tx];
+      const esperado = E.fondo[nro * 256 + (wy & 15) * 16 + (wx & 15)];
+      if (Pfondo[r * 320 + x] !== esperado) mal2++;
+    }
+  }
+}
+console.log('refill ABAJO: %s (%d diferencias)', mal2 === 0 ? 'OK' : 'FALLA', mal2);
+if (mal2 > 0) { console.error('SCROLL HACIA ARRIBA CON RAYAS'); process.exit(1); }
 console.log('TODO OK');
