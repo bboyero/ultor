@@ -109,4 +109,22 @@ console.log('trepar en (%d,%d): mapaY %d -> %d, subiendo=%s',
   repisa[0], repisa[1], myAntes, E.mapaY, E.subiendo);
 if (E.mapaY >= myAntes) { console.error('TREPAR NO SUBIO'); process.exit(1); }
 if (E.subiendo) { console.error('SUBE NO TERMINO'); process.exit(1); }
+// 12) enemigos: IA de persecución — héroe y enemigo en el suelo del arranque
+// (mapaY=3: suelo en la fila 12; Ey=149 → su sensor mira la fila 12, OY=101=Hy)
+E.mapaX = 0; E.mapaY = 3; E.PosEnbaldosa = 0; E.PosEnbaldosaY = 0; E.PX = 0; E.PY = 48;
+Object.assign(E.MALO[0], { Ex: 200, Ey: 149, Oex: 200, vidaE: 5, muertoE: false,
+  esaltando: false, ecae: false, Aguardia: false, ataca: false, ereposo: false,
+  secuenciaE: 0, sentidoE: false });
+for (let i = 0; i < 30; i++) await tick();
+const seMovio = E.MALO[0].Ex < 200 - 5;
+const x0 = E.MALO[0].Ex - E.PX, y0 = E.MALO[0].Ey - E.PY;
+console.log('enemigo persiguiendo: Ex=%d (héroe en x=%d) | pantalla (%d,%d) | estado: aguardia=%s ataca=%s',
+  E.MALO[0].Ex, E.Hx, x0, y0, E.MALO[0].Aguardia, E.MALO[0].ataca);
+if (!seMovio) { console.error('IA DE PERSECUCION FALLA'); process.exit(1); }
+if (!(x0 > -50 && x0 < 320 && y0 > -40 && y0 < 176)) { console.error('ENEMIGO FUERA DE PANTALLA'); process.exit(1); }
+// 13) muerte de un enemigo (E_muerte)
+E.MALO[0].vidaE = 0;
+for (let i = 0; i < 40; i++) await tick();
+console.log('enemigo 0: muertoE=%s', E.MALO[0].muertoE);
+if (!E.MALO[0].muertoE) { console.error('E_MUERTE FALLA'); process.exit(1); }
 console.log('TODO OK');

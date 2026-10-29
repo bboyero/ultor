@@ -42,7 +42,9 @@ const E = {
   veces: 0, salir: false, keys: new Uint8Array(128),
   Xcorrecion: 0,
   YO: null,          // recuadro del héroe para las intersecciones de combate
-  MALO: [],          // los 10 enemigos (Ex, Ey, Oex, vidaE...) — IA en el próximo hito
+  MALO: [],          // los 10 enemigos (Ex, Ey, Oex, vidaE...)
+  num: 0,            // enemigo en curso (como la variable global del Pascal)
+  recibiendo: false, // el héroe acaba de recibir (no le pegan dos veces seguidas)
   acelerado: false, // tests de Node: los bucles de animación no duermen
 };
 
@@ -188,10 +190,12 @@ function haysuelo() {
   return t !== 0 && E.PosEnbaldosaY === 0;
 }
 
-// poneH: sensores + dibujo del héroe (el corazón del frame del original)
+// poneH: héroe + sensores + enemigos (el corazón del frame del original:
+// primero el héroe, luego los sensores que pueden salir, luego MOVenemigo)
 async function poneH(PHx, PHy, que, sprite) {
   const d = DIM[sprite];
-  // sensores del original (si no salta/cae/sube y está vivo)
+  const off = d.off + d.X * d.Y * que;
+  blitSprite(PHx, PHy, E.hombre.subarray(off, off + d.X * d.Y), d.X, d.Y, !E.sentido);
   if (!E.saltando && !E.cayendo && !E.subiendo && E.vida > 0) {
     const t = caractEn(E.mapaX + 10 + (E.PosEnbaldosa > 10 ? 1 : 0), E.mapaY + 9);
     if (t === 0) { E.BAJAalturas = 0; await cae(); return; }
@@ -199,8 +203,13 @@ async function poneH(PHx, PHy, que, sprite) {
     else if (t === DESLIZDER) { ponefondo(2); return; }
     else if (t === DESLIZIZQ) { ponefondoATRAS(2); return; }
   }
-  const off = d.off + d.X * d.Y * que;
-  blitSprite(PHx, PHy, E.hombre.subarray(off, off + d.X * d.Y), d.X, d.Y, !E.sentido);
+  for (E.num = 0; E.num < E.MALO.length; E.num++) await MOVenemigo();
+}
+
+// enemigos: el bucle MOVenemigo del original, para las rutas que no pasan
+// por poneH (frame, carrera, combate, silencio, caída)
+async function enemigos() {
+  for (E.num = 0; E.num < E.MALO.length; E.num++) await MOVenemigo();
 }
 
 function actualizaVIDA() {
@@ -263,7 +272,7 @@ async function cae() {
   let sino = false;
   while (!haysuelo()) {
     ponefondoARRIBA(1);
-    dibujarFrame('CAE', E.secuencia, E.Hx, E.Hy);
+    await dibujarFrame('CAE', E.secuencia, E.Hx, E.Hy);
     if (E.veces & 1) { E.secuencia++; if (E.secuencia === 2) break; E.BAJAalturas++; }
     await dormir();
   }
@@ -271,7 +280,7 @@ async function cae() {
   if (E.sentido) ponefondo(1); else ponefondoATRAS(1);
   while (!haysuelo()) {
     ponefondoARRIBA(1);
-    if (sino) dibujarFrame('CAE', E.secuencia, E.Hx, E.Hy);
+    if (sino) await dibujarFrame('CAE', E.secuencia, E.Hx, E.Hy);
     sino = !sino;
     if (E.veces & 1) {
       E.secuencia++;
@@ -349,11 +358,12 @@ async function poneYsend(HX, HY, que, sprite) {
 }
 
 // dibujarFrame: como poneYsend pero el héroe no pasa sensores (cayendo=true)
-function dibujarFrame(sprite, que, HX, HY) {
+async function dibujarFrame(sprite, que, HX, HY) {
   const d = DIM[sprite];
   Pvirtual.set(Pfondo.subarray(0, MAXY * W));
   ponDuna();
   blitSprite(HX, HY, E.hombre.subarray(d.off + d.X * d.Y * que, d.off + d.X * d.Y * (que + 1)), d.X, d.Y, !E.sentido);
+  await enemigos();
   ponPanel();
   present();
   E.veces++;
@@ -400,6 +410,7 @@ async function frame() {
   Pvirtual.set(Pfondo.subarray(0, MAXY * W));
   ponDuna();
   blitSprite(E.Hx - 2, E.Hy - 4, E.hombre.subarray(d.off + d.X * d.Y * E.secuencia, d.off + d.X * d.Y * (E.secuencia + 1)), d.X, d.Y, !E.sentido);
+  await enemigos();
   ponPanel();
   present();
   E.veces++;
@@ -446,6 +457,7 @@ async function carrera() {
   Pvirtual.set(Pfondo.subarray(0, MAXY * W));
   ponDuna();
   blitSprite(E.Hx, E.Hy + 3, E.hombre.subarray(d.off + d.X * d.Y * E.secuencia, d.off + d.X * d.Y * (E.secuencia + 1)), d.X, d.Y, !E.sentido);
+  await enemigos();
   ponPanel();
   present();
   E.veces++;
@@ -490,6 +502,7 @@ async function silencio() {
   Pvirtual.set(Pfondo.subarray(0, MAXY * W));
   ponDuna();
   blitSprite(E.Hx + E.Xcorrecion, E.Hy, E.hombre.subarray(d.off + d.X * d.Y * E.secuencia, d.off + d.X * d.Y * (E.secuencia + 1)), d.X, d.Y, !E.sentido);
+  await enemigos();
   ponPanel();
   present();
   E.veces++;
@@ -682,6 +695,7 @@ async function combate() {
   Pvirtual.set(Pfondo.subarray(0, MAXY * W));
   ponDuna();
   blitSprite(E.Hx, E.Hy + 1, E.hombre.subarray(d.off + d.X * d.Y * E.secuencia, d.off + d.X * d.Y * (E.secuencia + 1)), d.X, d.Y, !E.sentido);
+  await enemigos();
   ponPanel();
   present();
   E.veces++;
@@ -692,6 +706,182 @@ async function combate() {
     if (E.keys[SC.ABJ]) await patada();
     else await punetazo();
   }
+}
+
+// ---------------- enemigos ----------------
+
+// E_putico / E_puticoatras: sprites de enemigo (espejo con el desfase del
+// original en E_puticoatras: primer byte se lee fuera del sprite = 0)
+function E_putico(PEx, PEy, datos, X, Y) {
+  for (let a = 0; a < Y; a++)
+    for (let b = 0; b < X; b++) {
+      const v = datos[a * X + b];
+      if (v !== 0) putPixel(PEx + b, PEy + a, v - 5);
+    }
+}
+function E_puticoatras(PEx, PEy, datos, X, Y) {
+  let off = X * Y;
+  for (let a = Y - 1; a >= 0; a--)
+    for (let b = 0; b < X; b++) {
+      const v = off < X * Y ? datos[off] : 0;
+      if (v !== 0) putPixel(PEx + b, PEy + a, v - 5);
+      off--;
+    }
+}
+
+// poneE: enemigo de coordenadas mundo a pantalla (recorte de 50/320/40/176)
+function poneE(PEx, PEy, que, sprite) {
+  const d = DIM[sprite];
+  const x = PEx - E.PX, y = PEy - E.PY;
+  if (x < -50 || x > 320 || y < -40 || y > 176) return;
+  const datos = E.hombre.subarray(d.off + d.X * d.Y * que, d.off + d.X * d.Y * (que + 1));
+  if (E.MALO[E.num].sentidoE) E_putico(x, y, datos, d.X, d.Y);
+  else E_puticoatras(x, y, datos, d.X, d.Y);
+}
+
+function E_haysuelo() {
+  const m = E.MALO[E.num];
+  const col = Math.floor(m.Ex / 16) + (m.Ex % 16 > 10 ? 1 : 0);
+  const t = caractEn(col, Math.floor(m.Ey / 16) + 3);
+  return t === BASE || t === SOLIDO || t === MORTAL;
+}
+function haysueloNEXT() {
+  const m = E.MALO[E.num];
+  let col = Math.floor(m.Ex / 16) + (m.Ex % 16 > 10 ? 1 : 0);
+  if (m.sentidoE) col++; else col--;
+  const t = caractEn(col, Math.floor(m.Ey / 16) + 3);
+  return t === BASE || t === SOLIDO;
+}
+
+function E_cae() {
+  const m = E.MALO[E.num];
+  m.Ey += 4;
+  m.E_ctrlcaida++;
+  if (m.E_ctrlcaida === 3) m.ecae = false;
+  poneE(m.Ex, m.Ey, 0, 'CAE');
+}
+
+function E_salta() {
+  const m = E.MALO[E.num];
+  if (E.veces & 1) {
+    if (m.sentidoE) m.Ex += 6; else m.Ex -= 6;
+    if (m.secuenciaE === 4 || m.secuenciaE === 5) {
+      if (m.sentidoE) m.Ex += 4; else m.Ex -= 4;
+    }
+    if (m.secuenciaE < DIM.SALTA.F - 1) m.secuenciaE++;
+    else m.esaltando = false;
+  }
+  poneE(m.Ex - 2, m.Ey - 4, m.secuenciaE, 'SALTA');
+}
+
+function E_noguardia() {
+  const m = E.MALO[E.num];
+  m.noguardia = true;
+  poneE(m.Ex, m.Ey + 1, m.secuenciaE, 'GUARD');
+  if (E.veces & 1) {
+    if (m.secuenciaE !== 0) m.secuenciaE--;
+    else { m.secuenciaE = 0; m.noguardia = false; }
+  }
+}
+
+function E_Guardia() {
+  const m = E.MALO[E.num];
+  poneE(m.Ex, m.Ey + 1, m.secuenciaE, 'GUARD');
+  if (E.veces & 1) {
+    if (m.secuenciaE !== DIM.GUARD.F - 2) m.secuenciaE++;
+    else { m.ataca = true; m.secuenciaE = 0; }
+  }
+}
+
+async function E_ataca() {
+  const m = E.MALO[E.num];
+  const OX = m.Ex - E.PX, OY = m.Ey - E.PY;
+  const excorrecion = m.sentidoE ? 0 : 9;
+  if (E.recibiendo) { poneE(m.Ex - excorrecion, m.Ey + 2, m.secuenciaE, 'PUNO'); return; }
+  if (E.veces & 1) {
+    if (m.secuenciaE !== DIM.PUNO.F - 1) m.secuenciaE++;
+    else m.secuenciaE--;
+  }
+  poneE(m.Ex - excorrecion, m.Ey + 2, m.secuenciaE, 'PUNO');
+  if (m.secuenciaE === DIM.PUNO.F - 1 && E.vida > 0) {
+    const EL = { x1: OX, y1: OY, x2: OX + DIM.PUNO.X, y2: OY + DIM.PUNO.Y };
+    if (E.vida > 0 && hayInterseccion(E.YO, EL)) {
+      E.vida--; actualizaVIDA(); E.recibiendo = true;
+      let scorreccion;
+      if (m.sentidoE) { ponefondo(2); scorreccion = 33; }
+      else { ponefondoATRAS(2); scorreccion = -33; }
+      // knockback + sangre (5 frames, como el original)
+      for (let distancia = 0; distancia <= 4; distancia++) {
+        Pvirtual.set(Pfondo.subarray(0, MAXY * W));
+        ponDuna();
+        await poneH(E.Hx, E.Hy, 3, 'GUARD');
+        await poneH(E.Hx + scorreccion, E.Hy + 13, distancia, 'SANGRE');
+        ponPanel();
+        present();
+        E.veces++;
+        await dormir();
+      }
+      E.recibiendo = false;
+      return;
+    }
+  }
+  if (!(((OX > E.Hx) && (OX - 30 <= E.Hx)) || ((OX < E.Hx) && (OX + 30 >= E.Hx)))) {
+    E_noguardia(); m.secuenciaE = DIM.GUARD.F - 2; m.ataca = false; m.Aguardia = false;
+  } else if (E.Hy !== OY) { m.ataca = false; m.Aguardia = false; }
+}
+
+function E_muerte() {
+  const m = E.MALO[E.num];
+  if (E.veces & 1) m.secuenciaE++;
+  switch (m.secuenciaE) {
+    case 0: poneE(m.Ex, m.Ey + 6, 0, 'MUEa'); break;
+    case 1: poneE(m.Ex, m.Ey + 10, 0, 'MUEb'); break;
+    case 2: poneE(m.Ex, m.Ey + 10, 1, 'MUEb'); break;
+    case 3: poneE(m.Ex, m.Ey + 25, 0, 'MUEc'); break;
+    case 4: poneE(m.Ex, m.Ey + 25, 1, 'MUEc'); break;
+    default: m.muertoE = true;
+  }
+}
+
+// MOVenemigo: la máquina de estados de cada enemigo (patrulla/guardia/ataque)
+async function MOVenemigo() {
+  const m = E.MALO[E.num];
+  if (!m.muertoE) {
+    if (m.vidaE <= 0) { E_muerte(); return; }
+    if (m.esaltando) { E_salta(); return; }
+    if (m.ecae) { E_cae(); return; }
+    if (!E_haysuelo()) { m.E_ctrlcaida = 0; m.ecae = true; E_cae(); return; }
+    if (m.ataca) { await E_ataca(); return; }
+    if (m.Aguardia) { E_Guardia(); return; }
+    if (m.noguardia) { E_noguardia(); return; }
+    // busca: si está a mi altura, me sigue; si no, patrulla Ex<->Oex
+    const OX = m.Ex - E.PX, OY = m.Ey - E.PY;
+    if (OY === E.Hy) {
+      if (OX > E.Hx) {
+        m.sentidoE = false;
+        if (OX - 15 <= E.Hx && haysueloNEXT()) {
+          m.Aguardia = true; if (!m.sentidoE) m.Ex -= 7; m.secuenciaE = 0; return;
+        }
+        if (haysueloNEXT()) { m.Ex -= 2; m.ereposo = false; }
+        else if (E_haysuelo()) { m.esaltando = true; m.secuenciaE = 0; return; }
+      } else {
+        m.sentidoE = true;
+        if (OX + 15 >= E.Hx && haysueloNEXT()) {
+          m.Aguardia = true; if (!m.sentidoE) m.Ex -= 7; m.secuenciaE = 0; return;
+        }
+        if (haysueloNEXT()) { m.Ex += 2; m.ereposo = false; }
+        else { m.esaltando = true; m.secuenciaE = 0; return; }
+      }
+    } else {
+      if (Math.abs(m.Ex - m.Oex) > 5) {
+        if (m.Ex > m.Oex) { m.Ex -= 2; m.ereposo = false; m.sentidoE = false; }
+        else { m.Ex += 2; m.ereposo = false; m.sentidoE = true; }
+      } else m.ereposo = true;
+    }
+    if (E.veces & 1) { m.secuenciaE++; if (m.secuenciaE > 7) m.secuenciaE = 0; }
+    if (m.ereposo) m.secuenciaE = 8;
+    poneE(m.Ex, m.Ey, m.secuenciaE, 'ANDA');
+  } else poneE(m.Ex, m.Ey + 25, 1, 'MUEc');
 }
 
 async function tick() {
@@ -772,7 +962,11 @@ async function boot() {
   for (let i = 0; i < 10; i++) {
     const Ex = enemigos[i * 4] | (enemigos[i * 4 + 1] << 8);
     const Ey = enemigos[i * 4 + 2] | (enemigos[i * 4 + 3] << 8);
-    E.MALO.push({ Ex, Ey, Oex: Ex, vidaE: 5 });
+    E.MALO.push({
+      Ex, Ey, Oex: Ex, vidaE: 5, secuenciaE: 0, E_ctrlcaida: 0,
+      sentidoE: false, Aguardia: false, noguardia: false, ataca: false,
+      ereposo: false, esaltando: false, ecae: false, muertoE: false,
+    });
   }
   E.YO = { x1: E.Hx, y1: E.Hy, x2: E.Hx + DIM.ANDA.X, y2: E.Hy + DIM.ANDA.Y };
 
