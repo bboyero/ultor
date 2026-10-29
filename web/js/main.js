@@ -741,6 +741,12 @@ async function combatGIRA() {
   E.secuencia = DIM.GUARD.F - 2;
 }
 
+// actualizaVIDA_E: barra de vida del enemigo actual (y=186)
+function actualizaVIDA_E() {
+  Hline(0, 186, 0, 5 * 4);
+  Hline(0, 186, 145, E.MALO[E.num].vidaE * 4);
+}
+
 // dadoSI_NO: el golpe alcanza a los enemigos (por ahora sin IA, solo estructura)
 function dadoSI_NO() {
   for (let num = 0; num < E.MALO.length; num++) {
@@ -748,7 +754,7 @@ function dadoSI_NO() {
     const EL = { x1: m.Ex - E.PX, y1: m.Ey - E.PY, x2: m.Ex - E.PX + 23, y2: m.Ey - E.PY + 43 };
     if (m.vidaE > 0 && hayInterseccion(E.YO, EL)) {
       play('puno');
-      m.vidaE--;
+      m.vidaE--; actualizaVIDA_E();
       if (E.sentido) m.Ex += 15; else m.Ex -= 15;
     }
   }
@@ -898,6 +904,7 @@ async function E_ataca() {
     const EL = { x1: OX, y1: OY, x2: OX + DIM.PUNO.X, y2: OY + DIM.PUNO.Y };
     if (E.vida > 0 && hayInterseccion(E.YO, EL)) {
       E.vida--; await actualizaVIDA(); play('golpe1'); E.recibiendo = true;
+      actualizaVIDA_E();
       let scorreccion;
       if (m.sentidoE) { ponefondo(2); scorreccion = 33; }
       else { ponefondoATRAS(2); scorreccion = -33; }
