@@ -467,8 +467,7 @@ function ponefondoABAJO(avances) {
 
 // poneYsend: copia fondo→virtual, duna, sprite y presenta (1 "vez")
 async function poneYsend(HX, HY, que, sprite) {
-  Pvirtual.set(Pfondo.subarray(0, MAXY * W));
-  ponDuna();
+  presentarFondo();
   await poneH(HX, HY, que, sprite);
   ponPanel();
   present();
@@ -478,8 +477,7 @@ async function poneYsend(HX, HY, que, sprite) {
 // dibujarFrame: como poneYsend pero el héroe no pasa sensores (cayendo=true)
 async function dibujarFrame(sprite, que, HX, HY) {
   const d = DIM[sprite];
-  Pvirtual.set(Pfondo.subarray(0, MAXY * W));
-  ponDuna();
+  presentarFondo();
   blitSprite(HX, HY, E.hombre.subarray(d.off + d.X * d.Y * que, d.off + d.X * d.Y * (que + 1)), d.X, d.Y, !E.sentido);
   await enemigos();
   ponPanel();
@@ -488,6 +486,23 @@ async function dibujarFrame(sprite, que, HX, HY) {
 }
 
 // ---------------- duna / panel / present ----------------
+
+// presentarFondo: la montaña parallax va AL FONDO — se dibuja primero y las
+// baldosas del nivel encima; los píxeles 0 de las baldosas dejan ver la
+// montaña (el nivel queda en primer plano sobre el paisaje)
+function presentarFondo() {
+  if (E.mapaY < 8) {
+    ponDuna(); // filas 0..99 = la montaña al fondo
+    Pvirtual.fill(0, 100 * W, 101 * W); // fila 100 = negra (la fila 100 del parallax)
+    for (let i = 0; i < 101 * W; i++) {
+      const v = Pfondo[i];
+      if (v !== 0) Pvirtual[i] = v; // las estructuras del nivel sobre la montaña
+    }
+    Pvirtual.set(Pfondo.subarray(101 * W, MAXY * W), 101 * W); // el resto opaco
+  } else {
+    Pvirtual.set(Pfondo.subarray(0, MAXY * W));
+  }
+}
 
 function ponDuna() {
   // BACKUP: parallaxDES = Pvirtual (¡la duna va ARRIBA, filas 0..100!) y
@@ -557,8 +572,7 @@ async function frame() {
   else { ponefondoATRAS(av); if (E.corriendo) ponefondoATRAS(1); }
   if (E.secuencia < 4) ponefondoABAJO(av); else ponefondoARRIBA(av);
   const d = DIM.SALTA;
-  Pvirtual.set(Pfondo.subarray(0, MAXY * W));
-  ponDuna();
+  presentarFondo();
   blitSprite(E.Hx - 2, E.Hy - 4, E.hombre.subarray(d.off + d.X * d.Y * E.secuencia, d.off + d.X * d.Y * (E.secuencia + 1)), d.X, d.Y, !E.sentido);
   await enemigos();
   ponPanel();
@@ -604,8 +618,7 @@ function correIZQ() {
 }
 async function carrera() {
   const d = DIM.CORRE;
-  Pvirtual.set(Pfondo.subarray(0, MAXY * W));
-  ponDuna();
+  presentarFondo();
   blitSprite(E.Hx, E.Hy + 3, E.hombre.subarray(d.off + d.X * d.Y * E.secuencia, d.off + d.X * d.Y * (E.secuencia + 1)), d.X, d.Y, !E.sentido);
   await enemigos();
   ponPanel();
@@ -752,8 +765,7 @@ async function combatGIRA() {
   play('combatG');
   const d = DIM.TGUAR;
   for (E.secuencia = 0; E.secuencia < d.F; E.secuencia++) {
-    Pvirtual.set(Pfondo.subarray(0, MAXY * W));
-    ponDuna();
+    presentarFondo();
     blitSprite(E.Hx - 1, E.Hy + 3, E.hombre.subarray(d.off + d.X * d.Y * E.secuencia, d.off + d.X * d.Y * (E.secuencia + 1)), d.X, d.Y, !E.sentido);
     ponPanel();
     present();
@@ -943,8 +955,7 @@ async function combatIZQ() {
 
 // combate: el estado de guardia, frame a frame (BACKUP)
 async function combate() {
-  Pvirtual.set(Pfondo.subarray(0, MAXY * W));
-  ponDuna();
+  presentarFondo();
   if (E.reposo) {
     const d = DIM.GUARD;
     blitSprite(E.Hx, E.Hy + 1, E.hombre.subarray(d.off + d.X * d.Y * 2, d.off + d.X * d.Y * 3), d.X, d.Y, !E.sentido);
@@ -1213,8 +1224,7 @@ async function tick() {
   if (E.salir) return;
   // guarda del repeat del original: dibujo + input solo en estado normal
   if (!E.guardia && !E.puntillas && !E.cayendo && !E.corriendo && !E.agachado) {
-    Pvirtual.set(Pfondo.subarray(0, MAXY * W));
-    ponDuna();
+    presentarFondo();
     await poneH(E.Hx, E.Hy, E.secuencia, 'ANDA');
     if (E.secuencia === 4) play('paso1');
     else if (E.secuencia === 0) play('paso2');
