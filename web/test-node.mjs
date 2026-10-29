@@ -138,4 +138,28 @@ if (numeroSamples() !== 13) { console.error('SONIDO FALLA'); process.exit(1); }
 for (const n of ['paso1', 'paso2', 'ahh', 'combat', 'combatG', 'puno', 'up', 'saltoF', 'golpe0', 'golpe1'])
   play(n); // el nuevo corta al anterior (semántica del original)
 console.log('play() sin errores');
+// 15) minimapa (TAB): punto blanco del héroe
+E.keys[0x0F] = 1; await tick(); E.keys[0x0F] = 0;
+await tick();
+const dot = Pvirtual[(E.mapaY + 8) * 320 + E.mapaX + 10];
+console.log('minimapa: punto del héroe (esperado 255) = %d', dot);
+if (dot !== 255) { console.error('MINIMAPA FALLA'); process.exit(1); }
+E.keys[0x0F] = 1; await tick(); E.keys[0x0F] = 0; await tick(); // desactivar
+// 16) idle: bostezo a los 128 frames y picar nariz a los 250
+E.vecesparado = 127;
+await tick();
+console.log('idle bostezo: vecesparado=%d secuencia=%d', E.vecesparado, E.secuencia);
+E.vecesparado = 250;
+await tick();
+console.log('idle picar: vecesparado=%d secuencia=%d', E.vecesparado, E.secuencia);
+// 17) muerte del héroe: animación + GAME.DAC + salir
+const { actualizaVIDA } = await import('./js/main.js');
+E.vida = 0;
+await actualizaVIDA();
+let goPix = 0;
+for (let y = 51; y < 125; y++) for (let x = 35; x < 284; x++)
+  if (Pvirtual[y * 320 + x]) goPix++;
+console.log('muerte: salir=%s, píxeles de game over=%d', E.salir, goPix);
+if (!E.salir) { console.error('MUERTE NO TERMINO'); process.exit(1); }
+if (goPix < 500) { console.error('GAME OVER INVISIBLE'); process.exit(1); }
 console.log('TODO OK');

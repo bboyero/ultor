@@ -5,5 +5,6 @@
 .chrome-e2e2/
 .chrome-e2e3/
 .chrome-e2e4/
+.chrome-e2e5/
 # Capturas de diagnóstico
 *.png

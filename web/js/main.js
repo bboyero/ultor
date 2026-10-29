@@ -47,6 +47,9 @@ const E = {
   MALO: [],          // los 10 enemigos (Ex, Ey, Oex, vidaE...)
   num: 0,            // enemigo en curso (como la variable global del Pascal)
   recibiendo: false, // el héroe acaba de recibir (no le pegan dos veces seguidas)
+  mapeado: false,    // minimapa (TAB)
+  vecesparado: 0,    // frames de inactividad (bostezo a 128, picar a 250)
+  gameover: null,    // GAME.DAC decodificado (249x74) para la muerte
   acelerado: false, // tests de Node: los bucles de animación no duermen
 };
 
@@ -186,22 +189,23 @@ function essolidoUP() {
 }
 
 // haysuelo: suelo = baldosa no vacía JUSTO en la fila de baldosa (posenbaldosaY=0)
-function haysuelo() {
+async function haysuelo() {
   const t = caractEn(E.mapaX + 10, E.mapaY + 9);
-  if (t === MORTAL) { E.vida = 0; actualizaVIDA(); }
+  if (t === MORTAL) { E.vida = 0; await actualizaVIDA(); }
   return t !== 0 && E.PosEnbaldosaY === 0;
 }
 
 // poneH: héroe + sensores + enemigos (el corazón del frame del original:
 // primero el héroe, luego los sensores que pueden salir, luego MOVenemigo)
 async function poneH(PHx, PHy, que, sprite) {
+  if (E.mapeado) ponemapa();
   const d = DIM[sprite];
   const off = d.off + d.X * d.Y * que;
   blitSprite(PHx, PHy, E.hombre.subarray(off, off + d.X * d.Y), d.X, d.Y, !E.sentido);
   if (!E.saltando && !E.cayendo && !E.subiendo && E.vida > 0) {
     const t = caractEn(E.mapaX + 10 + (E.PosEnbaldosa > 10 ? 1 : 0), E.mapaY + 9);
     if (t === 0) { E.BAJAalturas = 0; await cae(); return; }
-    if (t === MORTAL) { E.vida = 0; actualizaVIDA(); }
+    if (t === MORTAL) { E.vida = 0; await actualizaVIDA(); }
     else if (t === DESLIZDER) { ponefondo(2); return; }
     else if (t === DESLIZIZQ) { ponefondoATRAS(2); return; }
   }
@@ -214,11 +218,89 @@ async function enemigos() {
   for (E.num = 0; E.num < E.MALO.length; E.num++) await MOVenemigo();
 }
 
-function actualizaVIDA() {
+async function actualizaVIDA() {
   if (E.vida < 0) E.vida = 0;
   Hline(0, 180, 255, 25 * 4);
   Hline(0, 180, 98, E.vida * 4);
-  if (E.vida === 0) { /* muerte() en próximos hitos */ E.salir = true; }
+  if (E.vida === 0) await muerte();
+}
+
+// muerte: animación MUEa/b/c + GAME.DAC centrado (el game.dat 156x70 del
+// original no existe; se usa el DAC 249x74 con la semántica putico: 0
+// transparente, color-5) + 2 segundos y fuera
+async function muerte() {
+  play('muerto');
+  for (let i = 0; i < 3; i++) await poneYsend(E.Hx, E.Hy + 6, 0, 'MUEa');
+  for (let i = 0; i < 3; i++) await poneYsend(E.Hx, E.Hy + 10, 0, 'MUEb');
+  for (let i = 0; i < 3; i++) await poneYsend(E.Hx, E.Hy + 10, 1, 'MUEb');
+  for (let i = 0; i < 3; i++) await poneYsend(E.Hx, E.Hy + 25, 0, 'MUEc');
+  for (let i = 0; i < 3; i++) await poneYsend(E.Hx, E.Hy + 25, 1, 'MUEc');
+  if (E.gameover) {
+    const gx = (320 - 249) >> 1, gy = (176 - 74) >> 1;
+    for (let a = 0; a < 74; a++)
+      for (let b = 0; b < 249; b++) {
+        const v = E.gameover[a * 249 + b];
+        if (v !== 0) Pvirtual[(gy + a) * W + gx + b] = Math.max(1, v - 5);
+      }
+  }
+  present();
+  await dormir(2000);
+  E.salir = true;
+}
+
+// picando: animaciones de inactividad (bostezo a los 128 frames, picar
+// nariz a los 250; el contador es byte y da la vuelta como en el Pascal)
+async function picando() {
+  E.vecesparado = (E.vecesparado + 1) & 255;
+  if (E.vecesparado > 250 && E.vecesparado < 255) {
+    play('pica');
+    for (let ronda = 0; ronda < 4; ronda++) {
+      E.secuencia = 0;
+      do {
+        if (E.veces & 1) E.secuencia++;
+        await poneYsend(E.Hx + 3, E.Hy, E.secuencia, 'PICA');
+      } while (E.secuencia !== DIM.PICA.F - 1);
+    }
+    E.secuencia = 8;
+  } else if (E.vecesparado === 128) {
+    E.secuencia = 0;
+    while (E.secuencia < DIM.DELAY.F - 1) {
+      await poneYsend(E.Hx + 3, E.Hy, E.secuencia, 'DELAY');
+      if (E.veces & 1) E.secuencia++;
+    }
+    for (let i = 0; i < 16; i++) await poneYsend(E.Hx + 3, E.Hy, E.secuencia, 'DELAY');
+    await poneYsend(E.Hx + 3, E.Hy, DIM.DELAY.F - 2, 'DELAY');
+    E.secuencia = 8;
+  }
+}
+
+// ponemapa: minimapa completo (se construye una vez; los colores van
+// DIRECTOS, sin el -5 de los sprites)
+let Vmapa = null;
+function ponemapa() {
+  if (!Vmapa) {
+    Vmapa = new Uint8Array(E.largo * E.alto);
+    for (let y = 0; y < E.alto; y++)
+      for (let x = 0; x < E.largo; x++) {
+        const t = E.caract[y * E.largo + x];
+        if (t === SOLIDO) Vmapa[y * E.largo + x] = 200;
+        else if (t === BASE) Vmapa[y * E.largo + x] = 145;
+        else if (t === MORTAL) Vmapa[y * E.largo + x] = 32;
+        else if (t === DESLIZDER) Vmapa[y * E.largo + x] = 183;
+        else if (t === DESLIZIZQ) Vmapa[y * E.largo + x] = 120;
+      }
+  }
+  for (let y = 0; y < E.alto; y++)
+    for (let x = 0; x < E.largo; x++) {
+      const v = Vmapa[y * E.largo + x];
+      if (v !== 0) Pvirtual[y * W + x] = v;
+    }
+  for (const m of E.MALO) {
+    const c = m.muertoE ? 111 : 96;
+    const px = Math.floor(m.Ex / 16), py = Math.floor(m.Ey / 16) + 2;
+    if (px >= 0 && px < W && py >= 0 && py < MAXY) Pvirtual[py * W + px] = c;
+  }
+  Pvirtual[(E.mapaY + 8) * W + E.mapaX + 10] = 255;
 }
 
 // girar de sentido (3 frames de GIRA)
@@ -272,7 +354,7 @@ async function izquierda() {
 async function cae() {
   E.cayendo = true; E.secuencia = 0; E.reposo = false;
   let sino = false;
-  while (!haysuelo()) {
+  while (!(await haysuelo())) {
     ponefondoARRIBA(1);
     await dibujarFrame('CAE', E.secuencia, E.Hx, E.Hy);
     if (E.veces & 1) {
@@ -283,7 +365,7 @@ async function cae() {
   }
   E.secuencia = 2;
   if (E.sentido) ponefondo(1); else ponefondoATRAS(1);
-  while (!haysuelo()) {
+  while (!(await haysuelo())) {
     ponefondoARRIBA(1);
     if (sino) await dibujarFrame('CAE', E.secuencia, E.Hx, E.Hy);
     sino = !sino;
@@ -295,7 +377,7 @@ async function cae() {
     await dormir();
   }
   if (E.BAJAalturas > 100) {
-    E.vida -= (E.BAJAalturas - 100); actualizaVIDA(); play('saltoF');
+    E.vida -= (E.BAJAalturas - 100); await actualizaVIDA(); play('saltoF');
     let s = 0;
     while (s < DIM.CAID2.F - 1) { poneYsend(E.Hx, E.Hy, s, 'CAID2'); if (E.veces & 1) s++; await dormir(); }
     poneYsend(E.Hx, E.Hy, s, 'CAID2');
@@ -815,7 +897,7 @@ async function E_ataca() {
   if (m.secuenciaE === DIM.PUNO.F - 1 && E.vida > 0) {
     const EL = { x1: OX, y1: OY, x2: OX + DIM.PUNO.X, y2: OY + DIM.PUNO.Y };
     if (E.vida > 0 && hayInterseccion(E.YO, EL)) {
-      E.vida--; actualizaVIDA(); play('golpe1'); E.recibiendo = true;
+      E.vida--; await actualizaVIDA(); play('golpe1'); E.recibiendo = true;
       let scorreccion;
       if (m.sentidoE) { ponefondo(2); scorreccion = 33; }
       else { ponefondoATRAS(2); scorreccion = -33; }
@@ -917,7 +999,9 @@ async function tick() {
       if (borde()) { E.subiendo = true; await saltoq(); await colgarse(true); await sube(); }
       else if (borde3()) { E.subiendo = true; await colgarse(false); await sube(); }
       else { E.subiendo = true; await saltoq(); E.subiendo = false; }
-    } else if (!E.reposo) await para();
+    } else if (E.keys[SC.TAB]) { E.mapeado = !E.mapeado; await dormir(100); }
+    else if (!E.reposo) await para();
+    else await picando();
   } else if (E.corriendo) await carrera();
   else if (E.guardia) await combate();
   else if (E.puntillas) await silencio();
@@ -945,6 +1029,30 @@ async function fetchBuf(name) {
   const r = await fetch('assets/' + name);
   if (!r.ok) throw new Error(name + ': HTTP ' + r.status);
   return new Uint8Array(await r.arrayBuffer());
+}
+
+// cargarGameOver: decodifica GAME.DAC (RLE: c&192==192 → run c&63 + valor)
+async function cargarGameOver() {
+  try {
+    const r = await fetch('assets/GAME.DAC');
+    if (!r.ok) return;
+    const b = new Uint8Array(await r.arrayBuffer());
+    const bytes = b[4] | (b[5] << 8), alto = b[2] | (b[3] << 8);
+    const pix = new Uint8Array(249 * alto); // 249 útiles por fila (Xmax)
+    let ctrl = 7, off = 0;
+    for (let i = 0; i < alto; i++) {
+      let n = 0;
+      while (n < bytes) {
+        const c = b[ctrl++];
+        if ((c & 192) === 192) {
+          const run = c & 63, v = b[ctrl++];
+          const fin = Math.min(off + run, (i + 1) * 249);
+          pix.fill(v, off, fin); off = fin; n += run;
+        } else { if (off < (i + 1) * 249) pix[off++] = c; n++; }
+      }
+    }
+    E.gameover = pix;
+  } catch (e) { /* sin GAME.DAC el héroe muere sin pantalla de game over */ }
 }
 
 async function boot() {
@@ -996,6 +1104,7 @@ async function boot() {
   initTeclado();
   window.__E = E; // diagnóstico por CDP
   cargarSonido().catch(() => {}); // sin SONIDO.DAT el juego sigue mudo
+  cargarGameOver(); // sin GAME.DAC el héroe muere sin pantalla de game over
   // WebAudio se desbloquea con el primer gesto (política de los navegadores)
   const unlock = () => { desbloquear(); window.removeEventListener('pointerdown', unlock); window.removeEventListener('keydown', unlock); };
   window.addEventListener('pointerdown', unlock);
@@ -1014,4 +1123,4 @@ async function boot() {
 
 boot().catch((err) => { console.error(err); document.body.textContent = 'ERROR: ' + err; });
 
-export { E, Pvirtual, Pfondo, tick, salto, frame, cae, ponefondoABAJO, ponefondoARRIBA };
+export { E, Pvirtual, Pfondo, tick, salto, frame, cae, ponefondoABAJO, ponefondoARRIBA, actualizaVIDA };
