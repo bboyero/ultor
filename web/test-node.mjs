@@ -75,14 +75,6 @@ E.keys[0x50] = 0;
 for (let i = 0; i < 10; i++) await tick();
 console.log('agacharse: agachado=%s -> false=%s', agachado1, E.agachado);
 if (!agachado1 || E.agachado) { console.error('AGACHARSE FALLA'); process.exit(1); }
-// 9) puntillas (ALT)
-E.keys[0x38] = 1;
-for (let i = 0; i < 5; i++) await tick();
-const puntillas1 = E.puntillas;
-E.keys[0x38] = 0;
-for (let i = 0; i < 10; i++) await tick();
-console.log('puntillas: activas=%s -> false=%s', puntillas1, E.puntillas);
-if (!puntillas1 || E.puntillas) { console.error('PUNTILLAS FALLA'); process.exit(1); }
 // 10) combate: guardia + puñetazo + patada + salir de guardia
 E.keys[0x1D] = 1;
 await tick();
