@@ -5,6 +5,8 @@
 const W = 320, MAXY = 176, PANEL_Y = 175;
 const maxParallax = 101;
 
+import { cargarSonido, play, desbloquear } from './sonido.js';
+
 // Scancodes (POLL.PAS KeyTable)
 const SC = {
   ESC: 0x01, TAB: 0x0F, CTRL: 0x1D, ALT: 0x38, SPACE: 0x39,
@@ -273,7 +275,10 @@ async function cae() {
   while (!haysuelo()) {
     ponefondoARRIBA(1);
     await dibujarFrame('CAE', E.secuencia, E.Hx, E.Hy);
-    if (E.veces & 1) { E.secuencia++; if (E.secuencia === 2) break; E.BAJAalturas++; }
+    if (E.veces & 1) {
+      E.secuencia++; if (E.secuencia === 2) break; E.BAJAalturas++;
+      if (E.BAJAalturas === 15) { play('ahh'); E.BAJAalturas = 100; }
+    }
     await dormir();
   }
   E.secuencia = 2;
@@ -290,7 +295,7 @@ async function cae() {
     await dormir();
   }
   if (E.BAJAalturas > 100) {
-    E.vida -= (E.BAJAalturas - 100); actualizaVIDA();
+    E.vida -= (E.BAJAalturas - 100); actualizaVIDA(); play('saltoF');
     let s = 0;
     while (s < DIM.CAID2.F - 1) { poneYsend(E.Hx, E.Hy, s, 'CAID2'); if (E.veces & 1) s++; await dormir(); }
     poneYsend(E.Hx, E.Hy, s, 'CAID2');
@@ -560,6 +565,7 @@ function borde3() {
 
 // colgarse: animación COLG + (de4) sube el mundo 4
 async function colgarse(de4) {
+  play('up');
   if (de4) ponefondoABAJO(4);
   E.secuencia = 0;
   E.Xcorrecion = E.sentido ? 6 : -7;
@@ -614,6 +620,7 @@ function hayInterseccion(a, b) {
 async function enguardia() {
   E.YO = { x1: E.Hx, y1: E.Hy, x2: E.Hx + DIM.GUARD.X, y2: E.Hy + DIM.GUARD.Y };
   E.guardia = true;
+  play('combat');
   if (!E.sentido) E.Hx -= 7;
   E.secuencia = 0;
   while (E.secuencia < DIM.GUARD.F - 2) {
@@ -637,6 +644,7 @@ async function noguardia() {
 }
 
 async function combatGIRA() {
+  play('combatG');
   const d = DIM.TGUAR;
   for (E.secuencia = 0; E.secuencia < d.F; E.secuencia++) {
     Pvirtual.set(Pfondo.subarray(0, MAXY * W));
@@ -657,6 +665,7 @@ function dadoSI_NO() {
     const m = E.MALO[num];
     const EL = { x1: m.Ex - E.PX, y1: m.Ey - E.PY, x2: m.Ex - E.PX + 23, y2: m.Ey - E.PY + 43 };
     if (m.vidaE > 0 && hayInterseccion(E.YO, EL)) {
+      play('puno');
       m.vidaE--;
       if (E.sentido) m.Ex += 15; else m.Ex -= 15;
     }
@@ -806,7 +815,7 @@ async function E_ataca() {
   if (m.secuenciaE === DIM.PUNO.F - 1 && E.vida > 0) {
     const EL = { x1: OX, y1: OY, x2: OX + DIM.PUNO.X, y2: OY + DIM.PUNO.Y };
     if (E.vida > 0 && hayInterseccion(E.YO, EL)) {
-      E.vida--; actualizaVIDA(); E.recibiendo = true;
+      E.vida--; actualizaVIDA(); play('golpe1'); E.recibiendo = true;
       let scorreccion;
       if (m.sentidoE) { ponefondo(2); scorreccion = 33; }
       else { ponefondoATRAS(2); scorreccion = -33; }
@@ -834,7 +843,7 @@ function E_muerte() {
   const m = E.MALO[E.num];
   if (E.veces & 1) m.secuenciaE++;
   switch (m.secuenciaE) {
-    case 0: poneE(m.Ex, m.Ey + 6, 0, 'MUEa'); break;
+    case 0: play('golpe0'); poneE(m.Ex, m.Ey + 6, 0, 'MUEa'); break;
     case 1: poneE(m.Ex, m.Ey + 10, 0, 'MUEb'); break;
     case 2: poneE(m.Ex, m.Ey + 10, 1, 'MUEb'); break;
     case 3: poneE(m.Ex, m.Ey + 25, 0, 'MUEc'); break;
@@ -891,6 +900,8 @@ async function tick() {
     Pvirtual.set(Pfondo.subarray(0, MAXY * W));
     ponDuna();
     await poneH(E.Hx, E.Hy, E.secuencia, 'ANDA');
+    if (E.secuencia === 4) play('paso1');
+    else if (E.secuencia === 0) play('paso2');
     ponPanel();
     present();
     E.veces++;
@@ -984,6 +995,11 @@ async function boot() {
 
   initTeclado();
   window.__E = E; // diagnóstico por CDP
+  cargarSonido().catch(() => {}); // sin SONIDO.DAT el juego sigue mudo
+  // WebAudio se desbloquea con el primer gesto (política de los navegadores)
+  const unlock = () => { desbloquear(); window.removeEventListener('pointerdown', unlock); window.removeEventListener('keydown', unlock); };
+  window.addEventListener('pointerdown', unlock);
+  window.addEventListener('keydown', unlock);
   await poneYsend(E.Hx, E.Hy, E.secuencia, 'ANDA');
   // bucle: 1 tick por frame (60 fps); los bucles bloqueantes del original
   // (caída, arrancar...) duermen su frame por iteración dentro de tick.

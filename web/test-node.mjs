@@ -10,7 +10,11 @@ globalThis.fetch = async (url) => {
   const b = readFileSync(join('assets', url.replace('assets/', '')));
   return { ok: true, arrayBuffer: async () => b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) };
 };
-globalThis.window = { addEventListener: () => {} };
+globalThis.window = { addEventListener: () => {}, AudioContext: class {
+  createBuffer(ch, len, rate) { return { len, rate, data: new Float32Array(len), getChannelData() { return this.data; } }; }
+  createBufferSource() { return { buffer: null, connect() {}, start() {}, stop() {} }; }
+  resume() {} get destination() { return {}; }
+} };
 globalThis.requestAnimationFrame = () => {};
 globalThis.document.body = { textContent: "" };
 globalThis.performance = { now: () => Date.now() };
@@ -127,4 +131,11 @@ E.MALO[0].vidaE = 0;
 for (let i = 0; i < 40; i++) await tick();
 console.log('enemigo 0: muertoE=%s', E.MALO[0].muertoE);
 if (!E.MALO[0].muertoE) { console.error('E_MUERTE FALLA'); process.exit(1); }
+// 14) sonido: las 13 muestras decodificadas y play() sin crash
+const { numeroSamples, play } = await import('./js/sonido.js');
+console.log('sonido: %d muestras decodificadas', numeroSamples());
+if (numeroSamples() !== 13) { console.error('SONIDO FALLA'); process.exit(1); }
+for (const n of ['paso1', 'paso2', 'ahh', 'combat', 'combatG', 'puno', 'up', 'saltoF', 'golpe0', 'golpe1'])
+  play(n); // el nuevo corta al anterior (semántica del original)
+console.log('play() sin errores');
 console.log('TODO OK');
