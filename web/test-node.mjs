@@ -74,4 +74,39 @@ E.keys[0x38] = 0;
 for (let i = 0; i < 10; i++) await tick();
 console.log('puntillas: activas=%s -> false=%s', puntillas1, E.puntillas);
 if (!puntillas1 || E.puntillas) { console.error('PUNTILLAS FALLA'); process.exit(1); }
+// 10) combate: guardia + puñetazo + patada + salir de guardia
+E.keys[0x1D] = 1;
+await tick();
+console.log('guardia: activa=%s', E.guardia);
+if (!E.guardia) { console.error('GUARDIA FALLA'); process.exit(1); }
+E.keys[0x38] = 1;
+await tick();
+E.keys[0x38] = 0;
+E.keys[0x38] = 1; E.keys[0x50] = 1;
+await tick();
+E.keys[0x38] = 0; E.keys[0x50] = 0;
+console.log('tras puñetazo y patada: guardia=%s vida=%d', E.guardia, E.vida);
+E.keys[0x1D] = 0;
+for (let i = 0; i < 20; i++) await tick();
+console.log('tras soltar CTRL: guardia=%s reposo=%s Hx=%d', E.guardia, E.reposo, E.Hx);
+if (E.guardia) { console.error('NOGUARDIA FALLA'); process.exit(1); }
+// 11) trepar: buscar una repisa (borde) en el mapa y subir
+let repisa = null;
+for (let y = 1; y < E.alto - 15 && !repisa; y++)
+  for (let x = 0; x < E.largo - 15 && !repisa; x++) {
+    const suelo = E.caract[(y + 9) * E.largo + x + 10];
+    const rep = E.caract[(y + 5) * E.largo + x + 11];
+    const hueco = E.caract[(y + 5) * E.largo + x + 10];
+    if (suelo !== 0 && (rep === 1 || rep === 2) && hueco === 0) repisa = [x, y];
+  }
+if (!repisa) { console.error('NO HAY REPISAS EN EL MAPA'); process.exit(1); }
+E.mapaX = repisa[0]; E.mapaY = repisa[1]; E.PosEnbaldosa = 0; E.PosEnbaldosaY = 0;
+const myAntes = E.mapaY;
+E.keys[0x48] = 1;
+await tick();
+E.keys[0x48] = 0;
+console.log('trepar en (%d,%d): mapaY %d -> %d, subiendo=%s',
+  repisa[0], repisa[1], myAntes, E.mapaY, E.subiendo);
+if (E.mapaY >= myAntes) { console.error('TREPAR NO SUBIO'); process.exit(1); }
+if (E.subiendo) { console.error('SUBE NO TERMINO'); process.exit(1); }
 console.log('TODO OK');
