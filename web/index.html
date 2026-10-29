@@ -2,21 +2,69 @@
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>ULTOR — Web</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
 <style>
   html, body { margin: 0; padding: 0; background: #000; height: 100%; }
-  body { display: flex; align-items: center; justify-content: center; }
+  body { display: flex; align-items: center; justify-content: center; overflow: hidden; }
   canvas {
     image-rendering: pixelated;
     image-rendering: crisp-edges;
-    width: 320px; /* TODO: escalado adaptativo como en HARMFUL (resizeCanvas) */
-    height: 200px;
+    width: min(100vw, calc(100vh * 320 / 200));
+    height: min(100vh, calc(100vw * 200 / 320));
   }
+  /* ---- controles táctiles ---- */
+  #tcontroles { position: fixed; inset: 0; pointer-events: none; display: none; z-index: 5; }
+  html.tactil #tcontroles { display: block; }
+  html.tactil.en-juego #tmenu-botones { display: none; }
+  html.tactil:not(.en-juego) #tjuego-controles { display: none; }
+  .tbtn {
+    position: absolute; pointer-events: auto; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font: bold 5vmin sans-serif; user-select: none;
+    background: radial-gradient(circle at 35% 30%, rgba(255,255,255,.25), rgba(255,255,255,.08) 60%);
+    border: 2px solid rgba(255,255,255,.25);
+  }
+  #tpad { left: 2vmin; bottom: 2vmin; width: 30vmin; height: 30vmin; background: rgba(255,255,255,.06); }
+  #tknob {
+    position: absolute; left: 50%; top: 50%; width: 36px; height: 36px;
+    margin: -18px 0 0 -18px; border-radius: 50%; pointer-events: none;
+    background: radial-gradient(circle at 35% 30%, #ff7a7a, #c00 70%);
+    border: 2px solid rgba(255,255,255,.5);
+  }
+  #tjuego-controles .tbtn { background: radial-gradient(circle at 35% 30%, #ff9d9d, #b00 70%); }
+  #tcorrer { right: 24vmin; bottom: 4vmin; width: 12vmin; height: 12vmin; }
+  #tguardia { right: 12vmin; bottom: 4vmin; width: 12vmin; height: 12vmin; }
+  #tgolpe { right: 2vmin; bottom: 4vmin; width: 14vmin; height: 14vmin; }
+  #tpausa { right: 2vmin; top: 2vmin; width: 9vmin; height: 9vmin; font-size: 4vmin; }
+  #tsalir { right: 2vmin; top: 12vmin; width: 9vmin; height: 9vmin; font-size: 3vmin; }
+  #tmenu-botones .tbtn { border-radius: 12px; background: rgba(120,30,30,.75); font-size: 4vmin; }
+  #tjugar { left: 50%; transform: translateX(-50%); bottom: 16vmin; width: 40vmin; height: 9vmin; }
+  #tconfig { left: 50%; transform: translateX(-50%); bottom: 24vmin; width: 40vmin; height: 9vmin; }
+  #topciones { left: 50%; transform: translateX(-50%); bottom: 32vmin; width: 40vmin; height: 9vmin; }
+  #tsalirmenu { left: 50%; transform: translateX(-50%); bottom: 40vmin; width: 40vmin; height: 9vmin; }
 </style>
 </head>
 <body>
 <canvas id="lienzo" width="320" height="200"></canvas>
+<div id="tcontroles">
+  <div id="tjuego-controles">
+    <div id="tpad" class="tbtn"><div id="tknob"></div></div>
+    <div id="tcorrer" class="tbtn">CORRER</div>
+    <div id="tguardia" class="tbtn">GUARD</div>
+    <div id="tgolpe" class="tbtn">GOLPE</div>
+    <div id="tpausa" class="tbtn">II</div>
+    <div id="tsalir" class="tbtn">ESC</div>
+  </div>
+  <div id="tmenu-botones">
+    <div id="tjugar" class="tbtn">JUGAR (3)</div>
+    <div id="tconfig" class="tbtn">CONFIG (1)</div>
+    <div id="topciones" class="tbtn">OPCIONES (2)</div>
+    <div id="tsalirmenu" class="tbtn">SALIR (5)</div>
+  </div>
+</div>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>

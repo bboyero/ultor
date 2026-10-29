@@ -6,6 +6,8 @@ const W = 320, MAXY = 176, PANEL_Y = 175;
 const maxParallax = 101;
 
 import { cargarSonido, play, desbloquear } from './sonido.js';
+import { initTouch } from './entrada-tactil.js';
+import { musica, pararMusica, empezarMusica } from './musica.js';
 import { cargarDACs, creditos, presentacion, windows, config, opciones,
   pausa, abandonar, final, muertePantalla, fadeOUT, fadeIN, ponPaleta,
   mostrarDAC } from './menus.js';
@@ -396,13 +398,32 @@ async function cae() {
   E.cayendo = false; E.secuencia = 0;
 }
 
-// ponefondoARRIBA (usado por la caída): el mundo sube 2px. El refill de
-// píxeles de las filas 174-175 del original queda tapado por la duna
-// (filas 75..175) — invisible; solo se replican el scroll y las coordenadas.
+// ponefondoARRIBA (usado por la caída): el mundo sube 2px y se rellenan las
+// filas 174-175 (visibles con la duna arriba, como en el BACKUP)
 function ponefondoARRIBA(avances) {
   for (let rep = 0; rep < avances; rep++) {
     scrollARRIBA(Pfondo);
     E.PY += 2;
+    const px = E.PosEnbaldosa, py = E.PosEnbaldosaY;
+    // primera baldosa: filas 174-175 cols 0..15 (filas py y py+1 de la baldosa)
+    let nro = nroBaldosa(E.mapaX, E.mapaY + 11);
+    let aux = nro * 256 + px + py * 16;
+    let dst = 174 * W;
+    copiarFila(aux, dst, 16);
+    copiarFila(aux + 16, dst + W, 16);
+    dst += 16 - px; // fila 174, col 16-px
+    let resto = 16 - px;
+    let col = 16 - px;
+    for (let anchura = 0; anchura <= 19; anchura++) {
+      const mover = Math.min(320 - resto, 16);
+      if (mover > 0) {
+        nro = nroBaldosa(E.mapaX + 1 + anchura, E.mapaY + 11);
+        aux = nro * 256 + py * 16;
+        copiarFila(aux, col, mover);           // fila 174
+        copiarFila(aux + 16, W + col, mover);  // fila 175
+      }
+      col += 16; resto += 16;
+    }
     E.PosEnbaldosaY += 2;
     if (E.PosEnbaldosaY > 15) { E.PosEnbaldosaY = 0; E.mapaY++; }
   }
@@ -1367,6 +1388,10 @@ async function boot() {
   E.YO = { x1: E.Hx, y1: E.Hy, x2: E.Hx + DIM.ANDA.X, y2: E.Hy + DIM.ANDA.Y };
 
   initTeclado();
+  try { initTouch(); } catch (err) { console.error('táctil:', err); }
+  if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+    navigator.serviceWorker.register('sw.js').catch(() => {});
+  }
   window.__E = E; window.__P = Pvirtual; // diagnóstico por CDP
   cargarSonido().catch(() => {}); // sin SONIDO.DAT el juego sigue mudo
   cargarGameOver(); // sin GAME.DAC el héroe muere sin pantalla de game over
@@ -1395,12 +1420,16 @@ async function boot() {
       E.fase = 'fade2';
       await fadeOUT(400);
       E.fase = 'windows';
+      await empezarMusica('menu');
       const op = await windows();
+      await pararMusica();
       if (op === 3) break;              // salir (quit2dos)
       if (op === 2) { await config(); continue; }
       if (op === 4) { await opciones(); continue; }
       E.fase = 'juego';
+      await empezarMusica('juego');
       await iniciarPartida();           // 1 = jugar
+      await pararMusica();
     }
   } else {
     // modo test: directo a la partida (el test llama a tick() a mano)
@@ -1444,6 +1473,7 @@ async function iniciarPartida(soloIniciar) {
       alguien_al_lado: 0,
     });
   }
+  document.body.classList.add('en-juego');
   Pfondo.fill(0);
   fondoCompleto();
   ponPaleta(E.paletaJuego);
@@ -1455,6 +1485,7 @@ async function iniciarPartida(soloIniciar) {
     await tick();
     await dormir(1000 / E.fps);
   }
+  document.body.classList.remove('en-juego');
 }
 
 boot().catch((err) => { console.error(err); document.body.textContent = 'ERROR: ' + err; });
