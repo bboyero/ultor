@@ -40,6 +40,7 @@ const E = {
   corriendo: false, guardia: false, puntillas: false, agachado: false,
   ctrlduna: 0, Movfondo: false, BAJAalturas: 0,
   veces: 0, salir: false, keys: new Uint8Array(128),
+  Xcorrecion: 0,
   acelerado: false, // tests de Node: los bucles de animación no duermen
 };
 
@@ -298,6 +299,43 @@ function ponefondoARRIBA(avances) {
   }
 }
 
+// copiarFila: move32 del original (n bytes de una fila)
+function copiarFila(src, dst, n) {
+  for (let i = 0; i < n; i++) {
+    if (dst + i < Pfondo.length) Pfondo[dst + i] = E.fondo[src + i];
+  }
+}
+
+// ponefondoABAJO: el mundo baja 2px (cámara sube, al saltar). Refill de las
+// filas 0-1 (visibles) con la estructura del original.
+function ponefondoABAJO(avances) {
+  for (let rep = 0; rep < avances; rep++) {
+    if (E.saltando && essolidoUP()) return;
+    scrollABAJO(Pfondo);
+    E.PY -= 2;
+    E.PosEnbaldosaY -= 2;
+    if (E.PosEnbaldosaY < 0) { E.PosEnbaldosaY = 14; E.mapaY--; }
+    if (E.mapaY < 0) E.mapaY = 0;
+    const px = E.PosEnbaldosa, py = E.PosEnbaldosaY;
+    let nro = nroBaldosa(E.mapaX, E.mapaY);
+    let aux = nro * 256 + px + py * 16;
+    copiarFila(aux, 0, 16);           // fila 0 cols 0..15
+    copiarFila(aux + 16, W, 16);      // fila 1 cols 0..15
+    let resto = 16 - px;
+    let col = 16 - px;
+    for (let anchura = 0; anchura <= 19; anchura++) {
+      const mover = Math.min(320 - resto, 16);
+      if (mover > 0) {
+        nro = nroBaldosa(E.mapaX + 1 + anchura, E.mapaY);
+        aux = nro * 256 + py * 16;
+        copiarFila(aux, col, mover);         // fila 0
+        copiarFila(aux + 16, W + col, mover); // fila 1
+      }
+      col += 16; resto += 16;
+    }
+  }
+}
+
 // poneYsend: copia fondo→virtual, duna, sprite y presenta (1 "vez")
 async function poneYsend(HX, HY, que, sprite) {
   Pvirtual.set(Pfondo.subarray(0, MAXY * W));
@@ -350,20 +388,164 @@ function present() {
 
 // ---------------- bucle ----------------
 
-async function tick() {
-  if (E.salir) return;
-  // dibujo del frame (arriba del repeat del original: se dibuja SIEMPRE)
+// frame: un fotograma del salto (scroll horizontal + vertical + sprite SALTA)
+async function frame() {
+  const av = E.corriendo ? 2 : 1;
+  if (E.sentido) { ponefondo(av); if (E.corriendo) ponefondo(1); }
+  else { ponefondoATRAS(av); if (E.corriendo) ponefondoATRAS(1); }
+  if (E.secuencia < 4) ponefondoABAJO(av); else ponefondoARRIBA(av);
+  const d = DIM.SALTA;
   Pvirtual.set(Pfondo.subarray(0, MAXY * W));
   ponDuna();
-  await poneH(E.Hx, E.Hy, E.secuencia, 'ANDA');
+  blitSprite(E.Hx - 2, E.Hy - 4, E.hombre.subarray(d.off + d.X * d.Y * E.secuencia, d.off + d.X * d.Y * (E.secuencia + 1)), d.X, d.Y, !E.sentido);
   ponPanel();
   present();
   E.veces++;
-  // input (despacho del repeat del original)
-  if (E.keys[SC.DER] && !E.keys[SC.IZQ]) await derecha();
-  else if (E.keys[SC.IZQ] && !E.keys[SC.DER]) await izquierda();
-  else if (!E.reposo) await para();
-  // salto, correr, agacharse, guardia, puntillas: próximos hitos
+  await dormir();
+}
+
+// salto: 7 frames de SALTA (sube 4, baja 3)
+async function salto() {
+  E.saltando = true;
+  ponefondoABAJO(4);
+  for (E.secuencia = 0; E.secuencia < DIM.SALTA.F; E.secuencia++) {
+    await frame(); await frame();
+    if (E.secuencia === 4 || E.secuencia === 5) await frame();
+  }
+  E.saltando = false; E.secuencia = 1;
+}
+
+// saltoq: salto quieto (ARRIBA sin dirección)
+async function saltoq() {
+  E.secuencia = 0;
+  while (E.secuencia < DIM.SALTQ.F - 1) {
+    await poneYsend(E.Hx + 3, E.Hy - 8, E.secuencia, 'SALTQ');
+    if (E.veces & 1) E.secuencia++;
+  }
+  for (let i = 0; i < 4; i++) {
+    ponefondoABAJO(1);
+    await poneYsend(E.Hx + 3, E.Hy - 8, E.secuencia, 'SALTQ');
+  }
+}
+
+// carrera (ESPACIO): corre con el sprite CORRE y avanza 4px por frame
+function correDER() {
+  E.sentido = true;
+  if (E.veces & 1) { E.secuencia++; if (E.secuencia > DIM.CORRE.F - 1) E.secuencia = 0; }
+  ponefondo(4);
+}
+function correIZQ() {
+  E.sentido = false;
+  if (E.veces & 1) { E.secuencia++; if (E.secuencia > DIM.CORRE.F - 1) E.secuencia = 0; }
+  ponefondoATRAS(4);
+}
+async function carrera() {
+  const d = DIM.CORRE;
+  Pvirtual.set(Pfondo.subarray(0, MAXY * W));
+  ponDuna();
+  blitSprite(E.Hx, E.Hy + 3, E.hombre.subarray(d.off + d.X * d.Y * E.secuencia, d.off + d.X * d.Y * (E.secuencia + 1)), d.X, d.Y, !E.sentido);
+  ponPanel();
+  present();
+  E.veces++;
+  if (!E.keys[SC.SPACE]) { E.corriendo = false; E.secuencia = 0; return; }
+  if (E.keys[SC.ARR] && (E.keys[SC.DER] || E.keys[SC.IZQ])) { await salto(); return; }
+  if (E.keys[SC.DER]) correDER();
+  else if (E.keys[SC.IZQ]) correIZQ();
+  await dormir();
+}
+
+// silencio (ALT): andar de puntillas con ANDA2/BEGIN2/END2
+async function silenARRANCA() {
+  for (E.secuencia = 0; E.secuencia < DIM.BEGIN2.F; E.secuencia++) {
+    if (E.sentido) ponefondo(1); else ponefondoATRAS(1);
+    await poneYsend(E.Hx + E.Xcorrecion, E.Hy, E.secuencia, 'BEGIN2');
+  }
+  E.reposo = false; E.secuencia = 0;
+}
+async function silenPARA() {
+  for (E.secuencia = 0; E.secuencia < DIM.END2.F; E.secuencia++) {
+    if (E.sentido) ponefondo(1); else ponefondoATRAS(1);
+    await poneYsend(E.Hx + E.Xcorrecion, E.Hy, E.secuencia, 'END2');
+  }
+  E.reposo = true; E.secuencia = DIM.ANDA2.F - 1;
+}
+async function silenDER() {
+  E.sentido = true;
+  if (E.reposo) await silenARRANCA();
+  if (E.veces & 1) { E.secuencia++; if (E.secuencia > DIM.ANDA2.F - 2) E.secuencia = 0; }
+  ponefondo(1);
+}
+async function silenIZQ() {
+  E.sentido = false;
+  if (E.reposo) await silenARRANCA();
+  if (E.veces & 1) { E.secuencia++; if (E.secuencia > DIM.ANDA2.F - 2) E.secuencia = 0; }
+  ponefondoATRAS(1);
+}
+async function silencio() {
+  E.Xcorrecion = E.sentido ? 2 : 1;
+  if (E.reposo) E.secuencia = DIM.ANDA2.F - 1;
+  const d = DIM.ANDA2;
+  Pvirtual.set(Pfondo.subarray(0, MAXY * W));
+  ponDuna();
+  blitSprite(E.Hx + E.Xcorrecion, E.Hy, E.hombre.subarray(d.off + d.X * d.Y * E.secuencia, d.off + d.X * d.Y * (E.secuencia + 1)), d.X, d.Y, !E.sentido);
+  ponPanel();
+  present();
+  E.veces++;
+  if (!E.keys[SC.ALT]) {
+    E.puntillas = false;
+    if (!E.reposo) await silenPARA();
+    E.secuencia = 8;
+    return;
+  }
+  if (E.keys[SC.DER]) await silenDER();
+  else if (E.keys[SC.IZQ]) await silenIZQ();
+  else if (!E.reposo) await silenPARA();
+  await dormir();
+}
+
+// agacharse (ABAJO): se agacha con CAID2 y se levanta al soltar
+async function agacharse() {
+  if (!E.agachado) {
+    await poneYsend(E.Hx + 3, E.Hy, 1, 'CAID2');
+    await poneYsend(E.Hx + 3, E.Hy, 2, 'CAID2');
+    E.agachado = true;
+  } else if (!E.keys[SC.ABJ]) {
+    E.secuencia = 3;
+    while (E.secuencia < DIM.CAID2.F - 1) {
+      await poneYsend(E.Hx + 3, E.Hy, E.secuencia, 'CAID2');
+      if (E.veces & 1) E.secuencia++;
+    }
+    await poneYsend(E.Hx + 3, E.Hy, E.secuencia, 'CAID2');
+    E.secuencia = 8;
+    E.agachado = false;
+  } else await poneYsend(E.Hx + 3, E.Hy, 2, 'CAID2');
+}
+
+async function tick() {
+  if (E.salir) return;
+  // guarda del repeat del original: dibujo + input solo en estado normal
+  if (!E.guardia && !E.puntillas && !E.cayendo && !E.corriendo && !E.agachado) {
+    Pvirtual.set(Pfondo.subarray(0, MAXY * W));
+    ponDuna();
+    await poneH(E.Hx, E.Hy, E.secuencia, 'ANDA');
+    ponPanel();
+    present();
+    E.veces++;
+    // input (despacho del repeat del original)
+    if (E.keys[SC.ARR] && (E.keys[SC.DER] || E.keys[SC.IZQ])) await salto();
+    else if (E.keys[SC.SPACE]) { E.corriendo = true; E.secuencia = 0; }
+    else if (E.keys[SC.DER] && !E.keys[SC.IZQ]) await derecha();
+    else if (E.keys[SC.IZQ] && !E.keys[SC.DER]) await izquierda();
+    else if (E.keys[SC.ABJ]) await agacharse();
+    else if (E.keys[SC.CTRL]) { /* enguardia: próximo hito */ }
+    else if (E.keys[SC.ALT]) { E.puntillas = true; E.secuencia = 0; }
+    else if (E.keys[SC.ARR]) {
+      // borde/colgarse/sube: próximo hito; por ahora salto quieto
+      E.subiendo = true; await saltoq(); E.subiendo = false;
+    } else if (!E.reposo) await para();
+  } else if (E.corriendo) await carrera();
+  else if (E.puntillas) await silencio();
+  else if (E.agachado) await agacharse();
 }
 
 // teclado: KeyTable por scancode (POLL.PAS)
@@ -439,4 +621,4 @@ async function boot() {
 
 boot().catch((err) => { console.error(err); document.body.textContent = 'ERROR: ' + err; });
 
-export { E, Pvirtual, Pfondo, tick };
+export { E, Pvirtual, Pfondo, tick, salto, frame, cae, ponefondoABAJO, ponefondoARRIBA };

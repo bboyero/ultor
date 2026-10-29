@@ -41,4 +41,37 @@ for (let y = 101; y < 143; y++) for (let x = 155; x < 179; x++)
   if (Pvirtual[y * 320 + x]) hero++;
 console.log('héroe: %d px', hero);
 if (hero < 100) { console.error('HEROE INVISIBLE'); process.exit(1); }
+// 6) salto (ARRIBA + DERECHA) — con techo encima (fila 8): la subida se corta
+// y el héroe baja; el resultado neto depende de la geometría (fiel al original)
+const pyAntes = E.PY;
+E.keys[0x48] = 1; E.keys[0x4D] = 1;
+await tick(); await tick();
+E.keys[0x48] = 0; E.keys[0x4D] = 0;
+console.log('tras saltar: PY %d -> %d, saltando=%s secuencia=%d vida=%d',
+  pyAntes, E.PY, E.saltando, E.secuencia, E.vida);
+if (E.saltando) { console.error('SALTO NO TERMINO'); process.exit(1); }
+if (E.vida !== 25) { console.error('SALTO MATO AL HEROE'); process.exit(1); }
+// 7) correr (ESPACIO)
+const pxAntes = E.PX;
+E.keys[0x39] = 1; E.keys[0x4D] = 1;
+for (let i = 0; i < 60; i++) await tick();
+E.keys[0x39] = 0; E.keys[0x4D] = 0;
+console.log('tras correr: PX %d -> %d corriendo=%s', pxAntes, E.PX, E.corriendo);
+if (E.PX - pxAntes < 60) { console.error('CORRER NO AVANZO'); process.exit(1); }
+// 8) agacharse
+E.keys[0x50] = 1;
+await tick(); await tick();
+const agachado1 = E.agachado;
+E.keys[0x50] = 0;
+for (let i = 0; i < 10; i++) await tick();
+console.log('agacharse: agachado=%s -> false=%s', agachado1, E.agachado);
+if (!agachado1 || E.agachado) { console.error('AGACHARSE FALLA'); process.exit(1); }
+// 9) puntillas (ALT)
+E.keys[0x38] = 1;
+for (let i = 0; i < 5; i++) await tick();
+const puntillas1 = E.puntillas;
+E.keys[0x38] = 0;
+for (let i = 0; i < 10; i++) await tick();
+console.log('puntillas: activas=%s -> false=%s', puntillas1, E.puntillas);
+if (!puntillas1 || E.puntillas) { console.error('PUNTILLAS FALLA'); process.exit(1); }
 console.log('TODO OK');

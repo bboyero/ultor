@@ -45,6 +45,16 @@ console.log('tras andar 1s:', await evalJS(`({mapaX:__E.mapaX, PX:__E.PX, secuen
 await evalJS(sleep(600));
 console.log('tras soltar:', await evalJS(`({reposo:__E.reposo, secuencia:__E.secuencia})`));
 
+// salto: ARRIBA + DERECHA ~600 ms
+const pyAntes = await evalJS(`__E.PY`);
+await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'ArrowUp', code: 'ArrowUp' });
+await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'ArrowRight', code: 'ArrowRight' });
+await evalJS(sleep(600));
+await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'ArrowUp', code: 'ArrowUp' });
+await send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'ArrowRight', code: 'ArrowRight' });
+await evalJS(sleep(300));
+console.log('tras saltar:', await evalJS(`({PY:__E.PY, saltando:__E.saltando, vida:__E.vida})`), '(PY antes: ' + pyAntes + ')');
+
 const rect = JSON.parse(await evalJS(`(()=>{const r=document.getElementById('lienzo').getBoundingClientRect();
   return JSON.stringify({x:r.x,y:r.y,w:r.width,h:r.height});})()`));
 const shot = await send('Page.captureScreenshot', {

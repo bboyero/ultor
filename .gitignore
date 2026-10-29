@@ -2,5 +2,6 @@
 .chrome-tmp*/
 .chrome-cdp/
 .chrome-e2e/
+.chrome-e2e2/
 # Capturas de diagnóstico
 *.png
