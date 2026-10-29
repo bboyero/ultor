@@ -17,7 +17,7 @@ globalThis.window = { addEventListener: (t, fn) => { escuchas[t] = fn; }, remove
   resume() {} get destination() { return {}; }
 } };
 globalThis.requestAnimationFrame = () => {};
-globalThis.document.body = { textContent: "" };
+globalThis.document.body = { textContent: "", classList: { add() {}, remove() {} } };
 globalThis.performance = { now: () => Date.now() };
 
 const { E, Pvirtual, Pfondo, tick } = await import('./js/main.js');
