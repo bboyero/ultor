@@ -176,9 +176,10 @@ function fuegoEnSi() {
           if (dx === 0 && dy === 0) continue;
           s += fuego[(y + dy) * W + x + dx];
         }
-      let aponer = (s / 8) | 0;
-      aponer--;
-      if (aponer < 32) aponer = 32;
+      let aponer = ((s / 8) | 0) - 1;
+      if (aponer < 0) aponer = 255;      // el WORD -1 del Pascal (65535) se
+                                         // guarda como byte 255: la chispa
+      else if (aponer < 32) aponer = 32; // inicial que enciende el fuego
       fuego[(y - 1) * W + x] = aponer;
       // putpixel2: píxel doble en pantalla en (x*2+15, y+175)
       const v = fuego[y * W + x];
