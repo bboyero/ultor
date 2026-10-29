@@ -52,6 +52,7 @@ export async function cargarDACs() {
   for (const n of nombres) {
     try { DACs[n] = decodificarDAC(await fetchBuf(n)); } catch (e) { /* pantalla opcional */ }
   }
+  window.__DACs = DACs; window.__mostrarDAC = mostrarDAC; // diagnóstico
   try { fuente = await fetchBuf('MINI.DAT'); } catch (e) { /* sin fuente */ }
 }
 
@@ -59,6 +60,7 @@ export async function cargarDACs() {
 function mostrarDAC(nombre, x, y) {
   const d = DACs[nombre];
   if (!d) return;
+  if (d.pal) { E.paleta.set(d.pal); window.__palE = E.paleta; } // el DAC2VGA del original carga su paleta en `paleta`
   for (let a = 0; a < d.h; a++)
     for (let b = 0; b < d.w; b++) {
       const v = d.pix[a * d.w + b];
@@ -88,17 +90,12 @@ export function ponPaleta(pal768) {
 
 // fadeOUT: escala cada canal de la paleta hasta 0 (64 pasos del original)
 export async function fadeOUT(ms = 900) {
-  const origen = new Uint8Array(E.paleta); // 6 bits
-  const t0 = performance.now();
-  while (true) {
-    const k = Math.max(0, 1 - (performance.now() - t0) / ms);
-    for (let i = 0; i < 768; i++) {
-      const v = (origen[i] * k) | 0;
-      E.lut[(i / 3) | 0 * 4 + 0] = 0; // placeholder para claridad
-    }
-    break;
+  const origen = new Uint8Array(256 * 3); // 6 bits de la paleta MOSTRADA
+  for (let i = 0; i < 256; i++) {
+    origen[i * 3] = E.lut[i * 4] >> 2;
+    origen[i * 3 + 1] = E.lut[i * 4 + 1] >> 2;
+    origen[i * 3 + 2] = E.lut[i * 4 + 2] >> 2;
   }
-  // implementación directa: construir la LUT escalada
   const t1 = performance.now();
   for (;;) {
     const k = Math.max(0, 1 - (performance.now() - t1) / ms);
@@ -215,6 +212,8 @@ function fuegoEnSi() {
 export async function creditos() {
   mostrarDAC('ULTOR.DAC', 17, 0);
   present();
+  await fadeIN(400); // el original mostraba esto con la paleta por defecto,
+                     // pero con la suya propia se ve como debe
   await dormir(2000);
   // la cortinilla del original (baja la pantalla fila a fila)
   for (let y = 68; y >= 0; y--) {

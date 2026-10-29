@@ -1134,6 +1134,7 @@ async function boot() {
   E.mapa = new Uint16Array(mapaB.buffer, mapaB.byteOffset + 4, celdas);
   E.caract = mapaB.subarray(4 + celdas * 2, 4 + celdas * 3);
   E.fondo = fondo; E.duna = duna;
+  E.paletaJuego = pal; // PALETA.L01 (ponpaleta('paleta.l01',0) del BACKUP)
   E.numero = numero;
   // PANEL.DAC: RLE (c&192==192 → run c&63 + valor), 320x24 sin paleta
   {
@@ -1203,6 +1204,13 @@ async function boot() {
   window.addEventListener('keydown', unlock);
   await cargarDACs().catch(() => {});
   ponPaleta(pal);
+  // re-presentación a 60 Hz: la lógica va a 26 fps (como el DOS) pero el
+  // monitor del navegador es de 60 — repintar el mismo frame entre ticks
+  // evita el judder ("parpadeos"). En el DOS el CRT hacía esto mismo a 70 Hz.
+  if (!E.acelerado) {
+    const repintar = () => { present(); requestAnimationFrame(repintar); };
+    requestAnimationFrame(repintar);
+  }
   // flujo del BACKUP: creditos -> present -> windows (menú) -> jugar/...
   if (!E.acelerado) {
     while (true) {
@@ -1266,6 +1274,8 @@ async function iniciarPartida(soloIniciar) {
   }
   Pfondo.fill(0);
   fondoCompleto();
+  ponPaleta(E.paletaJuego);
+  await fadeIN(600); // el original funde a la paleta del juego al empezar
   await poneYsend(E.Hx, E.Hy, E.secuencia, 'ANDA');
   if (soloIniciar) return;
   // bucle del juego: ritmo frames_por_seg (26 por defecto, como el DOS)
