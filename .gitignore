@@ -1,0 +1,5 @@
+# Perfiles temporales de Chrome para pruebas headless
+.chrome-tmp*/
+.chrome-cdp/
+# Capturas de diagnóstico
+*.png
