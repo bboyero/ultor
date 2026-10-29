@@ -89,31 +89,6 @@ export function ponPaleta(pal768) {
 }
 
 // fadeOUT: escala cada canal de la paleta hasta 0 (64 pasos del original)
-export async function fadeOUT(ms = 900) {
-  const origen = new Uint8Array(256 * 3); // 6 bits de la paleta MOSTRADA
-  for (let i = 0; i < 256; i++) {
-    origen[i * 3] = E.lut[i * 4] >> 2;
-    origen[i * 3 + 1] = E.lut[i * 4 + 1] >> 2;
-    origen[i * 3 + 2] = E.lut[i * 4 + 2] >> 2;
-  }
-  window.__fadeLog = window.__fadeLog || [];
-  window.__fadeLog.push('OUT ' + ms);
-  const t1 = performance.now();
-  for (;;) {
-    const k = Math.max(0, 1 - (performance.now() - t1) / ms);
-    for (let i = 0; i < 256; i++) {
-      const r = (origen[i * 3] * k) | 0, g = (origen[i * 3 + 1] * k) | 0, b = (origen[i * 3 + 2] * k) | 0;
-      E.lut[i * 4] = (r << 2) | (r >> 4);
-      E.lut[i * 4 + 1] = (g << 2) | (g >> 4);
-      E.lut[i * 4 + 2] = (b << 2) | (b >> 4);
-    }
-    present();
-    if (k <= 0) { window.__fadeLog.push('OUT fin lut1=' + E.lut[4]); return; }
-    await dormir(16);
-  }
-}
-
-// fadeIN: sube cada canal hacia E.paleta (el destino), 63 pasos
 export async function fadeIN(ms = 900) {
   // fundido determinista: cada paso pinta el objetivo escalado por k.
   // (La versión acumulativa anterior podía quedarse a medio brillo.)
