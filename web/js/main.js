@@ -34,7 +34,7 @@ const E = {
   mapa: null, caract: null, largo: 0, alto: 0,
   fondo: null, hombre: null, duna: null, panel: null,
   // estado del juego (valores de arranque del original)
-  mapaX: 0, mapaY: 1, PX: 0, PY: 16,
+  mapaX: 0, mapaY: 2, PX: 0, PY: 32,
   PosEnbaldosa: 0, PosEnbaldosaY: 0,
   Hx: 155, Hy: 117 - 16, vida: 25,
   secuencia: 8, reposo: true, sentido: true,
@@ -204,10 +204,12 @@ async function poneH(PHx, PHy, que, sprite) {
   blitSprite(PHx, PHy, E.hombre.subarray(off, off + d.X * d.Y), d.X, d.Y, !E.sentido);
   if (!E.saltando && !E.cayendo && !E.subiendo && E.vida > 0) {
     const t = caractEn(E.mapaX + 10 + (E.PosEnbaldosa > 10 ? 1 : 0), E.mapaY + 9);
+    if (E.PosEnbaldosaY !== 0) { E.BAJAalturas = 0; await cae(); return; }
     if (t === 0) { E.BAJAalturas = 0; await cae(); return; }
     if (t === MORTAL) { E.vida = 0; await actualizaVIDA(); }
     else if (t === DESLIZDER) { ponefondo(2); return; }
     else if (t === DESLIZIZQ) { ponefondoATRAS(2); return; }
+    else if (t === 255) { await final(); } // salida: la baldosa de salida del nivel
   }
   for (E.num = 0; E.num < E.MALO.length; E.num++) await MOVenemigo();
 }
@@ -216,6 +218,14 @@ async function poneH(PHx, PHy, que, sprite) {
 // por poneH (frame, carrera, combate, silencio, caída)
 async function enemigos() {
   for (E.num = 0; E.num < E.MALO.length; E.num++) await MOVenemigo();
+}
+
+// final: llegar a la baldosa de SALIDA (255) — versión completa con
+// final.dac + enemywin.cmf en el hito de menús
+async function final() {
+  if (E.salir) return;
+  play('muerto');
+  E.salir = true;
 }
 
 async function actualizaVIDA() {
@@ -459,12 +469,15 @@ async function dibujarFrame(sprite, que, HX, HY) {
 // ---------------- duna / panel / present ----------------
 
 function ponDuna() {
+  // BACKUP: parallaxDES = Pvirtual (¡la duna va ARRIBA, filas 0..100!) y
+  // solo se dibuja si mapaY < profundo (8): en las cloacas profundas no hay cielo
+  if (E.mapaY >= 8) return;
   const c = E.ctrduna;
   for (let i = 0; i < 100; i++) {
     const src = i * 640 + c;
-    for (let x = 0; x < W; x++) Pvirtual[75 * W + i * W + x] = E.duna[src + x];
+    for (let x = 0; x < W; x++) Pvirtual[i * W + x] = E.duna[src + x];
   }
-  // fila 175 (fila 100 del parallax) queda negra, como el buffer original
+  // fila 100 (fila 100 del parallax) queda negra, como el buffer original
 }
 
 function ponPanel() {
