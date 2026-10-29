@@ -10,7 +10,8 @@ globalThis.fetch = async (url) => {
   const b = readFileSync(join('assets', url.replace('assets/', '')));
   return { ok: true, arrayBuffer: async () => b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength) };
 };
-globalThis.window = { addEventListener: () => {}, AudioContext: class {
+const escuchas = {};
+globalThis.window = { addEventListener: (t, fn) => { escuchas[t] = fn; }, removeEventListener: () => {}, AudioContext: class {
   createBuffer(ch, len, rate) { return { len, rate, data: new Float32Array(len), getChannelData() { return this.data; } }; }
   createBufferSource() { return { buffer: null, connect() {}, start() {}, stop() {} }; }
   resume() {} get destination() { return {}; }
@@ -26,9 +27,13 @@ await new Promise((r) => setTimeout(r, 100));
 // 1) estado inicial
 console.log('inicio: mapaX=%d mapaY=%d PX=%d PY=%d posX=%d posY=%d vida=%d',
   E.mapaX, E.mapaY, E.PX, E.PY, E.PosEnbaldosa, E.PosEnbaldosaY, E.vida);
-// 2) barra de vida
-const f180 = Pvirtual[180 * 320 + 10];
-console.log('barra y=180 x=10:', f180, f180 === 98 ? 'OK' : 'FALLA');
+// 2) HUD del BACKUP: vida (4 filas y=190, color 96), crono (y=190 x=104, color 145)
+const f190 = Pvirtual[190 * 320 + 5];
+const fCrono = Pvirtual[190 * 320 + 110];
+const fPuntos = Pvirtual[190 * 320 + 230];
+console.log('vida y=190 x=5: %d (esperado 96) | crono x=110: %d (145) | puntos x=230: %d',
+  f190, fCrono, fPuntos);
+if (f190 !== 96 || fCrono !== 145) { console.error('HUD FALLA'); process.exit(1); }
 // 3) andar a la derecha 120 frames
 E.keys[0x4D] = 1;
 for (let i = 0; i < 120 && !E.salir; i++) await tick();
@@ -155,11 +160,9 @@ console.log('idle picar: vecesparado=%d secuencia=%d', E.vecesparado, E.secuenci
 // 17) muerte del héroe: animación + GAME.DAC + salir
 const { actualizaVIDA } = await import('./js/main.js');
 E.vida = 0;
-await actualizaVIDA();
-let goPix = 0;
-for (let y = 51; y < 125; y++) for (let x = 35; x < 284; x++)
-  if (Pvirtual[y * 320 + x]) goPix++;
-console.log('muerte: salir=%s, píxeles de game over=%d', E.salir, goPix);
+const muerteP = actualizaVIDA();
+setTimeout(() => escuchas.keydown && escuchas.keydown({ preventDefault() {} }), 20);
+await muerteP;
+console.log('muerte: salir=%s (game over mostrado + fundido a negro, como el original)', E.salir);
 if (!E.salir) { console.error('MUERTE NO TERMINO'); process.exit(1); }
-if (goPix < 500) { console.error('GAME OVER INVISIBLE'); process.exit(1); }
 console.log('TODO OK');

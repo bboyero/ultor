@@ -6,9 +6,13 @@ const W = 320, MAXY = 176, PANEL_Y = 175;
 const maxParallax = 101;
 
 import { cargarSonido, play, desbloquear } from './sonido.js';
+import { cargarDACs, creditos, presentacion, windows, config, opciones,
+  pausa, abandonar, final, muertePantalla, fadeOUT, fadeIN, ponPaleta,
+  mostrarDAC } from './menus.js';
 
 // Scancodes (POLL.PAS KeyTable)
 const SC = {
+  P: 0x19,
   ESC: 0x01, TAB: 0x0F, CTRL: 0x1D, ALT: 0x38, SPACE: 0x39,
   ARR: 0x48, IZQ: 0x4B, DER: 0x4D, ABJ: 0x50, T: 0x14,
 };
@@ -56,6 +60,8 @@ const E = {
   numero: null,      // NUMERO.DAT: 10 dígitos de 8x8 (64 B cada uno)
   gameover: null,    // GAME.DAC decodificado (249x74) para la muerte
   acelerado: false, // tests de Node: los bucles de animación no duermen
+  fps: 26,          // frames_por_seg del BACKUP (configurable 0..64 en config)
+  fase: '',         // diagnóstico del flujo (creditos/present/windows/juego)
 };
 
 // ritmo de frame de los bucles bloqueantes del original (DOS los pintaba en
@@ -225,14 +231,6 @@ async function enemigos() {
   for (E.num = 0; E.num < E.MALO.length; E.num++) await MOVenemigo();
 }
 
-// final: llegar a la baldosa de SALIDA (255) — versión completa con
-// final.dac + enemywin.cmf en el hito de menús
-async function final() {
-  if (E.salir) return;
-  play('muerto');
-  E.salir = true;
-}
-
 async function actualizaVIDA() {
   if (E.vida < 0) E.vida = 0;
   Hline(0, 180, 255, 25 * 4);
@@ -250,17 +248,7 @@ async function muerte() {
   for (let i = 0; i < 3; i++) await poneYsend(E.Hx, E.Hy + 10, 1, 'MUEb');
   for (let i = 0; i < 3; i++) await poneYsend(E.Hx, E.Hy + 25, 0, 'MUEc');
   for (let i = 0; i < 3; i++) await poneYsend(E.Hx, E.Hy + 25, 1, 'MUEc');
-  if (E.gameover) {
-    const gx = (320 - 249) >> 1, gy = (176 - 74) >> 1;
-    for (let a = 0; a < 74; a++)
-      for (let b = 0; b < 249; b++) {
-        const v = E.gameover[a * 249 + b];
-        if (v !== 0) Pvirtual[(gy + a) * W + gx + b] = Math.max(1, v - 5);
-      }
-  }
-  present();
-  await dormir(2000);
-  E.salir = true;
+  await muertePantalla(); // GAME.DAC + espera + fundido (BACKUP muerte())
 }
 
 // picando: animaciones de inactividad (bostezo a los 128 frames, picar
@@ -1045,12 +1033,21 @@ async function tick() {
     ponPanel();
     present();
     E.veces++;
-    E.cronometro++;
-  if (((E.cronometro / 16) | 0) !== E.ultimaAC) E.ultimaAC = (E.cronometro / 16) | 0;
-  if (E.cronometro >= 1000) E.salir = true; // tiempo agotado (craneo.dac vendrá con las pantallas)
+    if (E.veces % E.fps === 0) {
+    E.cronometro++; // el original cuenta segundos (INT 1C cada ~1 s)
+    if (((E.cronometro / 16) | 0) !== E.ultimaAC) E.ultimaAC = (E.cronometro / 16) | 0;
+  }
+  if (E.cronometro >= 1000) {
+    // tiempo agotado: craneo.dac + game.dac (BACKUP actualizaCRONO)
+    await fadeOUT(600);
+    mostrarDAC('CRANEO.DAC', 0, 0);
+    present();
+    await fadeIN();
+    E.salir = true;
+  }
   // input (despacho del repeat del original)
     if (E.keys[SC.ARR] && (E.keys[SC.DER] || E.keys[SC.IZQ])) await salto();
-    else if (E.keys[SC.SPACE]) { E.corriendo = true; E.secuencia = 0; }
+    else if (E.keys[SC.SPACE]) { E.corriendo = true; E.reposo = true; E.secuencia = 8; }
     else if (E.keys[SC.DER] && !E.keys[SC.IZQ]) await derecha();
     else if (E.keys[SC.IZQ] && !E.keys[SC.DER]) await izquierda();
     else if (E.keys[SC.ABJ]) await agacharse();
@@ -1061,12 +1058,14 @@ async function tick() {
       else if (borde3()) { E.subiendo = true; await colgarse(false); await sube(); }
       else { E.subiendo = true; await saltoq(); E.subiendo = false; }
     } else if (E.keys[SC.TAB]) { E.mapeado = !E.mapeado; await dormir(100); }
+    else if (E.keys[SC.P]) await pausa();
     else if (!E.reposo) await para();
     else await picando();
   } else if (E.corriendo) await carrera();
   else if (E.guardia) await combate();
   else if (E.puntillas) await silencio();
   else if (E.agachado) await agacharse();
+  if (E.keys[SC.ESC]) { E.keys[SC.ESC] = 0; if (await abandonar()) E.salir = true; }
 }
 
 // teclado: KeyTable por scancode (POLL.PAS)
@@ -1160,11 +1159,18 @@ async function boot() {
   // enemigos desde ENEMIGO.LOC (8 registros de 30 B): Ex,Ey,Oex u16 + 12
   // flags + vidaE (byte 18) + 10 + CLASE (byte 29). maxENE=74 pero el
   // fichero solo tiene 8: los 66 restantes quedan muertos.
+  E.MALOplantilla = [];
   {
     const loc = await fetchBuf('ENEMIGO.LOC');
     for (let i = 0; i < 74; i++) {
       const r = i * 30;
       const vivo = r + 30 <= loc.length;
+      E.MALOplantilla.push({ vivo, ...(vivo ? {
+        Ex: loc[r] | (loc[r + 1] << 8),
+        Ey: loc[r + 2] | (loc[r + 3] << 8),
+        Oex: loc[r + 4] | (loc[r + 5] << 8),
+        vidaE: loc[r + 18], clase: loc[r + 29],
+      } : { Ex: 0, Ey: 0, Oex: 0, vidaE: 0, clase: 0 }) });
       E.MALO.push(vivo ? {
         Ex: loc[r] | (loc[r + 1] << 8),
         Ey: loc[r + 2] | (loc[r + 3] << 8),
@@ -1187,18 +1193,6 @@ async function boot() {
   }
   E.YO = { x1: E.Hx, y1: E.Hy, x2: E.Hx + DIM.ANDA.X, y2: E.Hy + DIM.ANDA.Y };
 
-  // fondo_completo (arranque: mapaX=0, mapaY=1)
-  let py = 0;
-  for (let i = 0; i < 11; i++) {
-    for (let j = 0; j < 20; j++) {
-      const nro = E.mapa[(E.mapaY + i) * E.largo + E.mapaX + j];
-      const tile = nro * 256;
-      for (let k = 0; k < 16; k++)
-        Pfondo.set(fondo.subarray(tile + k * 16, tile + k * 16 + 16), (py + k) * W + j * 16);
-    }
-    py += 16;
-  }
-
   initTeclado();
   window.__E = E; window.__P = Pvirtual; // diagnóstico por CDP
   cargarSonido().catch(() => {}); // sin SONIDO.DAT el juego sigue mudo
@@ -1207,18 +1201,80 @@ async function boot() {
   const unlock = () => { desbloquear(); window.removeEventListener('pointerdown', unlock); window.removeEventListener('keydown', unlock); };
   window.addEventListener('pointerdown', unlock);
   window.addEventListener('keydown', unlock);
-  await poneYsend(E.Hx, E.Hy, E.secuencia, 'ANDA');
-  // bucle: 1 tick por frame (60 fps); los bucles bloqueantes del original
-  // (caída, arrancar...) duermen su frame por iteración dentro de tick.
-  // En modo test (acelerado) no arranca: el test llama a tick() a mano.
+  await cargarDACs().catch(() => {});
+  ponPaleta(pal);
+  // flujo del BACKUP: creditos -> present -> windows (menú) -> jugar/...
   if (!E.acelerado) {
-    while (!E.salir) {
-      await tick();
-      await dormir();
+    while (true) {
+      E.fase = 'creditos';
+      await creditos();
+      E.fase = 'fade1';
+      await fadeOUT(600);
+      E.fase = 'present';
+      await presentacion();
+      E.fase = 'fade2';
+      await fadeOUT(400);
+      E.fase = 'windows';
+      const op = await windows();
+      if (op === 3) break;              // salir (quit2dos)
+      if (op === 2) { await config(); continue; }
+      if (op === 4) { await opciones(); continue; }
+      E.fase = 'juego';
+      await iniciarPartida();           // 1 = jugar
     }
+  } else {
+    // modo test: directo a la partida (el test llama a tick() a mano)
+    await iniciarPartida(true);
+  }
+}
+
+// fondoCompleto: 11x20 baldosas desde (mapaX, mapaY) al buffer Pfondo
+function fondoCompleto() {
+  let py = 0;
+  for (let i = 0; i < 11; i++) {
+    for (let j = 0; j < 20; j++) {
+      const nro = E.mapa[(E.mapaY + i) * E.largo + E.mapaX + j];
+      const tile = nro * 256;
+      for (let k = 0; k < 16; k++)
+        Pfondo.set(E.fondo.subarray(tile + k * 16, tile + k * 16 + 16), (py + k) * W + j * 16);
+    }
+    py += 16;
+  }
+}
+
+// iniciarPartida: el jugar() del BACKUP (reinicio del estado + bucle del juego)
+async function iniciarPartida(soloIniciar) {
+  E.puntos = 0; E.MALOSmuertos = 0; E.cronometro = 0; E.ultimaAC = -1;
+  E.mapaX = 0; E.mapaY = 2; E.PX = 0; E.PY = 32;
+  E.PosEnbaldosa = 0; E.PosEnbaldosaY = 0;
+  E.Hx = 155; E.Hy = 117 - 16; E.vida = 25;
+  E.saltando = E.cayendo = E.subiendo = E.corriendo = E.guardia = E.puntillas = E.agachado = false;
+  E.sentido = true; E.reposo = true; E.secuencia = 8; E.salir = false;
+  E.ctrduna = 0; E.Movfondo = false; E.BAJAalturas = 0; E.vecesparado = 0;
+  E.mapeado = false; E.veces = 0;
+  // enemigos de nuevo (plantilla de ENEMIGO.LOC)
+  for (let i = 0; i < E.MALO.length; i++) {
+    const t = E.MALOplantilla[i];
+    Object.assign(E.MALO[i], {
+      Ex: t.Ex, Ey: t.Ey, Oex: t.Oex, vidaE: t.vidaE, clase: t.clase,
+      muertoE: !t.vivo, secuenciaE: 0, E_ctrlcaida: 0,
+      sentidoE: false, Aguardia: false, noguardia: false, ataca: false,
+      ereposo: true, esaltando: false, ecae: false,
+      Erecibiendo: false, Egolpeando: false, tipo_recibe: 0, tipo_ataca: 0,
+      alguien_al_lado: 0,
+    });
+  }
+  Pfondo.fill(0);
+  fondoCompleto();
+  await poneYsend(E.Hx, E.Hy, E.secuencia, 'ANDA');
+  if (soloIniciar) return;
+  // bucle del juego: ritmo frames_por_seg (26 por defecto, como el DOS)
+  while (!E.salir) {
+    await tick();
+    await dormir(1000 / E.fps);
   }
 }
 
 boot().catch((err) => { console.error(err); document.body.textContent = 'ERROR: ' + err; });
 
-export { E, Pvirtual, Pfondo, tick, salto, frame, cae, ponefondoABAJO, ponefondoARRIBA, actualizaVIDA };
+export { E, Pvirtual, Pfondo, tick, salto, frame, cae, ponefondoABAJO, ponefondoARRIBA, actualizaVIDA, dormir, present };

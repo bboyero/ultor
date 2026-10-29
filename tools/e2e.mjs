@@ -35,6 +35,27 @@ const sleep = (ms) => `new Promise(r=>setTimeout(r,${ms}))`;
 
 console.log('boot:', await evalJS(`(async()=>{await ${sleep(2500)}; return __E ? 'E listo mapaY='+__E.mapaY+' PY='+__E.PY : 'E NO LISTO';})()`));
 
+// flujo: esperar cada fase y pulsar cuando toca
+async function esperarFase(f) {
+  for (let i = 0; i < 60; i++) {
+    if (await evalJS(`__E && __E.fase`) === f) return;
+    await evalJS(sleep(200));
+  }
+  throw new Error('la fase ' + f + ' no llega');
+}
+async function tecla(key, code) {
+  await send('Input.dispatchKeyEvent', { type: 'keyDown', key, code });
+  await send('Input.dispatchKeyEvent', { type: 'keyUp', key, code });
+}
+await esperarFase('present');
+await tecla('a', 'KeyA');               // PULSA PARA CONTINUAR
+await esperarFase('windows');
+await tecla('3', 'Digit3');             // JUGAR
+for (let i = 0; i < 60; i++) {          // la partida arranca y el héroe cae
+  if ((await evalJS(`__E.veces`)) > 0 && !(await evalJS(`__E.cayendo`))) break;
+  await evalJS(sleep(200));
+}
+
 // mantener ArrowRight ~1 s
 await send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'ArrowRight', code: 'ArrowRight' });
 await evalJS(sleep(1000));
