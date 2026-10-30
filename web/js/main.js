@@ -1047,7 +1047,7 @@ function E_cae() {
   m.Ey += 4;
   m.E_ctrlcaida++;
   if (m.E_ctrlcaida === 3) m.ecae = false;
-  poneE(m.Ex, m.Ey, 0, 'CAEe');
+  poneE(m.Ex, m.Ey, 0, 'CAE'); // el sprite CAE del héroe (como el BACKUP)
 }
 
 function E_noguardia() {
@@ -1370,15 +1370,18 @@ async function boot() {
   // fichero solo tiene 8: los 66 restantes quedan muertos.
   E.MALOplantilla = [];
   {
+    // sizeof(CTRLenemigo) = 32 bytes (alineación de Turbo Pascal):
+    // Ex,Ey,Oex u16 + 12 flags + vidaE@18 + EL 8B + tipo_recibe@28
+    // tipo_ataca@29 CLASE@30 alguien_al_lado@31
     const loc = await fetchBuf('ENEMIGO.LOC');
     for (let i = 0; i < 74; i++) {
-      const r = i * 30;
-      const vivo = r + 30 <= loc.length;
+      const r = i * 32;
+      const vivo = r + 32 <= loc.length;
       E.MALOplantilla.push({ vivo, ...(vivo ? {
         Ex: loc[r] | (loc[r + 1] << 8),
         Ey: loc[r + 2] | (loc[r + 3] << 8),
         Oex: loc[r + 4] | (loc[r + 5] << 8),
-        vidaE: loc[r + 18], clase: loc[r + 29],
+        vidaE: loc[r + 18], clase: loc[r + 30],
       } : { Ex: 0, Ey: 0, Oex: 0, vidaE: 0, clase: 0 }) });
       E.MALO.push(vivo ? {
         Ex: loc[r] | (loc[r + 1] << 8),
