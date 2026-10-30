@@ -24,9 +24,11 @@ const { E, Pvirtual, Pfondo, tick } = await import('./js/main.js');
 E.acelerado = true; // los bucles de animación no duermen en los tests
 await new Promise((r) => setTimeout(r, 100));
 
-// 1) estado inicial
-console.log('inicio: mapaX=%d mapaY=%d PX=%d PY=%d posX=%d posY=%d vida=%d',
-  E.mapaX, E.mapaY, E.PX, E.PY, E.PosEnbaldosa, E.PosEnbaldosaY, E.vida);
+// 1) estado inicial — con los 75 enemigos reales ahora activos, los
+// neutralizamos para las pruebas de movimiento (la IA se prueba aparte)
+for (const m of E.MALO) m.muertoE = true;
+console.log('inicio: mapaX=%d mapaY=%d PX=%d PY=%d posX=%d posY=%d vida=%d (enemigos=%d)',
+  E.mapaX, E.mapaY, E.PX, E.PY, E.PosEnbaldosa, E.PosEnbaldosaY, E.vida, E.MALO.length);
 // 2) HUD del BACKUP: vida (4 filas y=190, color 96), crono (y=190 x=104, color 145)
 const f190 = Pvirtual[190 * 320 + 5];
 const fCrono = Pvirtual[190 * 320 + 110];
@@ -151,6 +153,7 @@ await tick();
 console.log('idle picar: vecesparado=%d secuencia=%d', E.vecesparado, E.secuencia);
 // 17) muerte del héroe: animación + GAME.DAC + salir
 const { actualizaVIDA } = await import('./js/main.js');
+for (const m of E.MALO) m.muertoE = true; // dejar limpio antes de morir
 E.vida = 0;
 const muerteP = actualizaVIDA();
 setTimeout(() => escuchas.keydown && escuchas.keydown({ preventDefault() {} }), 20);
