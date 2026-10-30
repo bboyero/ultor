@@ -508,15 +508,15 @@ function presentarFondo() {
 }
 
 function ponDuna() {
-  // BACKUP: parallaxDES = Pvirtual (¡la duna va ARRIBA, filas 0..100!) y
-  // solo se dibuja si mapaY < profundo (8): en las cloacas profundas no hay cielo
+  // Solo las 75 primeras filas de la duna (cielo + montaña): la captura del
+  // juego original muestra el techo de la alcantarilla a partir de la fila
+  // ~75, no tapado por la montaña. Y solo si mapaY < profundo (8).
   if (E.mapaY >= 8) return;
   const c = E.ctrduna;
-  for (let i = 0; i < 100; i++) {
+  for (let i = 0; i < 75; i++) {
     const src = i * 640 + c;
     for (let x = 0; x < W; x++) Pvirtual[i * W + x] = E.duna[src + x];
   }
-  // fila 100 (fila 100 del parallax) queda negra, como el buffer original
 }
 
 function ponPanel() {
