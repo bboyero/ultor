@@ -320,7 +320,7 @@ function ponemapa() {
 // girar de sentido (3 frames de GIRA)
 async function gira() {
   let secuencia = 0;
-  while (secuencia < DIM.GIRA.F - 1) {
+  while (secuencia <= DIM.GIRA.F - 1) {
     poneYsend(E.Hx + 3, E.Hy, secuencia, 'GIRA');
     if (E.veces & 1) secuencia++;
     await dormir();
@@ -332,7 +332,7 @@ async function gira() {
 // arranca (BEGIN) / para (END)
 async function arranca() {
   E.secuencia = 0;
-  while (E.secuencia < DIM.BEGIN.F - 1) {
+  while (E.secuencia <= DIM.BEGIN.F - 1) {
     poneYsend(E.Hx, E.Hy, E.secuencia, 'BEGIN');
     if (E.veces & 1) { E.secuencia++; if (E.sentido) ponefondo(1); else ponefondoATRAS(1); }
     await dormir();
@@ -341,7 +341,7 @@ async function arranca() {
 }
 async function para() {
   E.secuencia = 0;
-  while (E.secuencia < DIM.END.F - 1) {
+  while (E.secuencia <= DIM.END.F - 1) {
     poneYsend(E.Hx, E.Hy, E.secuencia, 'END');
     if (E.veces & 1) { E.secuencia++; if (E.sentido) ponefondo(1); else ponefondoATRAS(1); }
     await dormir();
@@ -364,39 +364,51 @@ async function izquierda() {
   ponefondoATRAS(1);
 }
 
-// caída: el mundo sube mientras no haya suelo; BAJAalturas>100 → daño
+// cae (BACKUP): el mundo sube mientras no haya suelo. Primer bucle: anima
+// CAE cada frame y corta en secuencia=2; segundo bucle: dibuja 1 de 3 frames
+// (sino 0,1,2 -> dibuja con (sino and 2)=2); aterrizaje con CAID2 si la caída
+// es >7 (daño solo si >100) y el grito (ahh) a BAJAalturas=12
 async function cae() {
+  let sino = 0;
   E.cayendo = true; E.secuencia = 0; E.reposo = false;
-  let sino = false;
   while (!(await haysuelo())) {
     ponefondoARRIBA(1);
     await dibujarFrame('CAE', E.secuencia, E.Hx, E.Hy);
     if (E.veces & 1) {
-      E.secuencia++; if (E.secuencia === 2) break; E.BAJAalturas++;
-      if (E.BAJAalturas === 15) { play('ahh'); E.BAJAalturas = 100; }
+      E.secuencia++;
+      if (E.secuencia === 2) break;
+      E.BAJAalturas++;
     }
-    await dormir();
   }
   E.secuencia = 2;
-  if (E.sentido) ponefondo(1); else ponefondoATRAS(1);
   while (!(await haysuelo())) {
     ponefondoARRIBA(1);
-    if (sino) await dibujarFrame('CAE', E.secuencia, E.Hx, E.Hy);
-    sino = !sino;
+    if ((sino & 2) === 2) await dibujarFrame('CAE', E.secuencia, E.Hx, E.Hy);
+    sino++;
+    if (sino > 2) sino = 0;
     if (E.veces & 1) {
       E.secuencia++;
       if (E.secuencia === 4) { E.secuencia = 2; E.BAJAalturas++; }
     }
-    if (E.mapaY > E.alto) break; // halt(1) del original
-    await dormir();
+    if (E.BAJAalturas === 12) { play('ahh'); E.BAJAalturas = 100; }
+    if (E.mapaY > E.alto) break;
   }
-  if (E.BAJAalturas > 100) {
-    E.vida -= (E.BAJAalturas - 100); await actualizaVIDA(); play('saltoF');
-    let s = 0;
-    while (s < DIM.CAID2.F - 1) { poneYsend(E.Hx, E.Hy, s, 'CAID2'); if (E.veces & 1) s++; await dormir(); }
-    poneYsend(E.Hx, E.Hy, s, 'CAID2');
+  E.cayendo = false;
+  if (E.BAJAalturas > 7) {
+    if (E.BAJAalturas > 100) {
+      E.vida -= (E.BAJAalturas - 100);
+      await actualizaVIDA();
+      play('saltoF');
+    }
+    E.secuencia = 0;
+    play('saltoF');
+    while (E.secuencia < DIM.CAID2.F - 1) {
+      await poneYsend(E.Hx, E.Hy, E.secuencia, 'CAID2');
+      if (E.veces & 1) E.secuencia++;
+    }
+    await poneYsend(E.Hx, E.Hy, E.secuencia, 'CAID2');
   }
-  E.cayendo = false; E.secuencia = 0;
+  E.secuencia = 0;
 }
 
 // ponefondoARRIBA (usado por la caída): el mundo sube 2px y se rellenan las
@@ -687,7 +699,7 @@ async function colgarse(de4) {
   if (de4) ponefondoABAJO(4);
   E.secuencia = 0;
   E.Xcorrecion = E.sentido ? 6 : -7;
-  while (E.secuencia < DIM.COLG.F - 1) {
+  while (E.secuencia <= DIM.COLG.F - 1) {
     await poneYsend(E.Hx + E.Xcorrecion, E.Hy - 6, E.secuencia, 'COLG');
     if (E.veces & 1) E.secuencia++;
   }
@@ -741,7 +753,7 @@ async function enguardia() {
   play('combat');
   if (!E.sentido) E.Hx -= 7;
   E.secuencia = 0;
-  while (E.secuencia < DIM.GUARD.F - 2) {
+  while (E.secuencia <= DIM.GUARD.F - 2) {
     await poneYsend(E.Hx, E.Hy + 1, E.secuencia, 'GUARD');
     if (E.veces & 1) E.secuencia++;
   }
