@@ -506,9 +506,16 @@ function presentarFondo() {
   if (E.mapaY < 8) {
     ponDuna(); // filas 0..99 = la montaña al fondo
     Pvirtual.fill(0, 100 * W, 101 * W); // fila 100 = negra (la fila 100 del parallax)
-    for (let i = 0; i < 101 * W; i++) {
-      const v = Pfondo[i];
-      if (v !== 0) Pvirtual[i] = v; // las estructuras del nivel sobre la montaña
+    // solo las filas de CIELO ABIERTO (sin contenido en el mapa) dejan ver la
+    // montaña; donde el mapa tiene estructuras, se dibujan opacas encima y la
+    // ocultan — también durante los saltos cerca de la entrada de las cloacas
+    for (let y = 0; y < 101; y++) {
+      let abierta = true;
+      const base = y * W;
+      for (let x = 0; x < W; x++) {
+        if (Pfondo[base + x] !== 0) { abierta = false; break; }
+      }
+      if (!abierta) Pvirtual.set(Pfondo.subarray(base, base + W), base);
     }
     Pvirtual.set(Pfondo.subarray(101 * W, MAXY * W), 101 * W); // el resto opaco
   } else {
