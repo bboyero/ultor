@@ -520,6 +520,9 @@ function ponDuna() {
 }
 
 function ponPanel() {
+  // el original hace fillchar(negro) antes del DAC2VGA: la base del panel
+  // es negra (los píxeles 0 del arte no dejan ver el juego detrás)
+  Pvirtual.fill(0, 176 * W, 200 * W);
   // PANEL.DAC en (0,176) con semántica putico (0 transparente, color-5)
   for (let a = 0; a < 24; a++)
     for (let b = 0; b < W; b++) {
